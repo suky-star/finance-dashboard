@@ -7,9 +7,6 @@
   <meta name="theme-color" content="#f4f6fa" />
   <title>财经仪表盘 · 实时行情</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     * { -webkit-tap-highlight-color: transparent; }
@@ -19,8 +16,10 @@
     .safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom) + 5rem); }
     @keyframes spin { to { transform: rotate(360deg); } }
     .animate-spin { animation: spin 1s linear infinite; }
-    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-    .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #f8f8f8 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+    .page { display: none; }
+    .page.active { display: block; }
+    .nav-btn.active { color: hsl(217 91% 60%); }
+    .nav-btn { color: hsl(220 9% 46%); }
   </style>
   <script>
     tailwind.config = {
@@ -32,9 +31,7 @@
             foreground: 'hsl(222 47% 11%)',
             'muted-foreground': 'hsl(220 9% 46%)',
             primary: 'hsl(217 91% 60%)',
-            'primary-foreground': 'hsl(0 0% 100%)',
             accent: 'hsl(220 20% 95%)',
-            'accent-foreground': 'hsl(222 47% 11%)',
             border: 'hsl(220 13% 91%)',
             rise: 'hsl(0 84% 60%)',
             fall: 'hsl(142 71% 45%)',
@@ -47,241 +44,149 @@
   </script>
 </head>
 <body class="bg-background">
-  <div id="root"></div>
-  
-  <script type="text/babel" data-presets="react">
-    const { useState, useEffect, useRef, useCallback } = React;
+  <div id="app"></div>
 
-    // ============ 实时行情数据获取（新浪财经 JSONP）============
+  <script>
+    // ============ SVG 图标 ============
+    const icons = {
+      'home': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+      'trending-up': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
+      'trending-down': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>',
+      'gem': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/></svg>',
+      'newspaper': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6z"/></svg>',
+      'lightbulb': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>',
+      'flame': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',
+      'refresh-cw': '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>',
+      'link-2': '<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+      'zap': '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+      'bar-chart-3': '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>',
+      'clock': '<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+      'minus': '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+    };
+
+    const icon = (name, className = '') => {
+      return icons[name] || '';
+    };
+
+    // ============ 行情数据 ============
     const SINA_API = 'https://hq.sinajs.cn/list=';
-    
-    // 新浪财经行情代码映射
     const MARKET_CODES = {
-      // A股指数
-      aShare: {
-        shanghai: 'sh000001',      // 上证指数
-        shenzhen: 'sz399001',      // 深证成指
-        chinext: 'sz399006',       // 创业板指
-        kc50: 'sh000688',          // 科创50
-      },
-      // 美股指数
-      us: {
-        dow: 'gb_$dji',            // 道琼斯
-        nasdaq: 'gb_ixic',         // 纳斯达克
-        sp500: 'gb_inx',           // 标普500
-        russell: 'gb_rut',         // 罗素2000（可能不支持）
-      },
-      // 贵金属
-      metals: {
-        gold: 'hf_GC',             // COMEX黄金
-        silver: 'hf_SI',           // COMEX白银
-        copper: 'hf_HG',           // COMEX铜
-      },
-      // 港股
-      hk: {
-        hsi: 'rt_hkHSI',           // 恒生指数
-      },
+      aShare: { shanghai: 'sh000001', shenzhen: 'sz399001', chinext: 'sz399006', kc50: 'sh000688' },
+      us: { dow: 'gb_$dji', nasdaq: 'gb_ixic', sp500: 'gb_inx' },
+      metals: { gold: 'hf_GC', silver: 'hf_SI' },
     };
 
-    // JSONP 请求函数
-    const fetchSinaQuotes = (codes) => {
-      return new Promise((resolve, reject) => {
-        const codeStr = codes.join(',');
-        const script = document.createElement('script');
-        const callbackName = 'sina_cb_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-        
-        // 设置超时
-        const timeout = setTimeout(() => {
-          cleanup();
-          reject(new Error('请求超时'));
-        }, 10000);
-        
-        const cleanup = () => {
-          clearTimeout(timeout);
-          delete window[callbackName];
-          script.remove();
-        };
-        
-        window[callbackName] = () => {
-          // 数据会写入 hq_str_xxx 全局变量
-          clearTimeout(timeout);
-          const results = {};
-          codes.forEach(code => {
-            const varName = 'hq_str_' + code.replace(/\$/g, '_').replace(/\./g, '_');
-            const rawValue = window[varName];
-            if (rawValue) {
-              results[code] = parseSinaData(code, rawValue);
-            }
-          });
-          cleanup();
-          resolve(results);
-        };
-        
-        script.src = `${SINA_API}${codeStr}?${callbackName}=${Date.now()}`;
-        script.onerror = () => {
-          cleanup();
-          reject(new Error('网络请求失败'));
-        };
-        document.head.appendChild(script);
-        
-        // 新浪接口实际不支持JSONP callback，它直接定义全局变量
-        // 我们用另一种方式：监听script加载完成后读取全局变量
-        script.onload = () => {
-          clearTimeout(timeout);
-          const results = {};
-          codes.forEach(code => {
-            const varName = 'hq_str_' + code.replace(/\$/g, '_').replace(/\./g, '_');
-            const rawValue = window[varName];
-            if (rawValue) {
-              results[code] = parseSinaData(code, rawValue);
-            }
-          });
-          cleanup();
-          resolve(results);
-        };
-      });
-    };
-
-    // 解析新浪返回的数据
-    const parseSinaData = (code, rawStr) => {
+    function parseSinaData(code, rawStr) {
       const parts = rawStr.split(',');
-      
-      // A股指数格式: 名称,今开,昨收,现价,最高,最低,买一价,卖一价,成交量,成交额,买一量,...,日期,时间
       if (code.startsWith('sh') || code.startsWith('sz')) {
+        const price = parseFloat(parts[3]);
+        const preClose = parseFloat(parts[2]);
         return {
           name: parts[0],
-          open: parseFloat(parts[1]),
-          preClose: parseFloat(parts[2]),
-          price: parseFloat(parts[3]),
-          high: parseFloat(parts[4]),
-          low: parseFloat(parts[5]),
-          volume: parseFloat(parts[8]),
-          amount: parseFloat(parts[9]),
-          date: parts[parts.length - 3],
-          time: parts[parts.length - 2],
-          change: parseFloat(parts[3]) - parseFloat(parts[2]),
-          changePercent: ((parseFloat(parts[3]) - parseFloat(parts[2])) / parseFloat(parts[2]) * 100),
+          price: price,
+          change: price - preClose,
+          changePercent: ((price - preClose) / preClose * 100),
         };
       }
-      
-      // 美股格式: 名称, 现价, 涨跌额, 涨跌幅, 今开, 最高, 最低, 昨收, 成交量, ...
       if (code.startsWith('gb_')) {
         return {
           name: parts[0],
           price: parseFloat(parts[1]),
           change: parseFloat(parts[2]),
           changePercent: parseFloat(parts[3]),
-          open: parseFloat(parts[4]),
-          high: parseFloat(parts[5]),
-          low: parseFloat(parts[6]),
-          preClose: parseFloat(parts[7]),
-          volume: parseFloat(parts[8]),
         };
       }
-      
-      // 贵金属/期货格式
       if (code.startsWith('hf_')) {
         return {
           name: parts[0],
           price: parseFloat(parts[1]),
           change: parseFloat(parts[2]),
           changePercent: parseFloat(parts[3]),
-          high: parseFloat(parts[4]),
-          low: parseFloat(parts[5]),
-          open: parseFloat(parts[7]),
-          preClose: parseFloat(parts[8]),
         };
       }
-      
-      // 港股实时
-      if (code.startsWith('rt_')) {
-        return {
-          name: parts[1],
-          price: parseFloat(parts[6]),
-          change: parseFloat(parts[7]),
-          changePercent: parseFloat(parts[8]),
-          open: parseFloat(parts[2]),
-          high: parseFloat(parts[4]),
-          low: parseFloat(parts[5]),
-          preClose: parseFloat(parts[3]),
-          volume: parseFloat(parts[12]),
-          amount: parseFloat(parts[11]),
-        };
-      }
-      
       return { name: parts[0], price: parseFloat(parts[1] || 0) };
+    }
+
+    function fetchSinaQuotes(codes) {
+      return new Promise((resolve, reject) => {
+        const codeStr = codes.join(',');
+        const script = document.createElement('script');
+        const timeout = setTimeout(() => { reject(new Error('超时')); script.remove(); }, 10000);
+        script.src = SINA_API + codeStr + '?t=' + Date.now();
+        script.onload = () => {
+          clearTimeout(timeout);
+          const results = {};
+          codes.forEach(code => {
+            const varName = 'hq_str_' + code.replace(/\$/g, '_').replace(/\./g, '_');
+            const rawValue = window[varName];
+            if (rawValue) results[code] = parseSinaData(code, rawValue);
+          });
+          script.remove();
+          resolve(results);
+        };
+        script.onerror = () => { clearTimeout(timeout); script.remove(); reject(new Error('请求失败')); };
+        document.head.appendChild(script);
+      });
+    }
+
+    // ============ 数据状态 ============
+    const state = {
+      activeTab: 'overview',
+      loading: false,
+      aShare: null,
+      us: null,
+      metals: null,
+      hotTab: 'hot',
     };
 
-    // ============ 图标组件 ============
-    const Icon = ({ name, className = '' }) => {
-      const icons = {
-        'home': <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
-        'trending-up': <><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></>,
-        'gem': <path d="M6 3h12l4 6-10 13L2 9z" />,
-        'newspaper': <><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2" /><path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6z" /></>,
-        'lightbulb': <><path d="M9 18h6" /><path d="M10 22h4" /><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" /></>,
-        'flame': <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />,
-        'refresh-cw': <><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></>,
-        'link-2': <><path d="M9 17H7A5 5 0 0 1 7 7h2" /><path d="M15 7h2a5 5 0 1 1 0 10h-2" /><line x1="8" y1="12" x2="16" y2="12" /></>,
-        'zap': <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
-        'bar-chart-3': <><line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line x1="6" y1="20" x2="6" y2="16" /></>,
-        'trending-down': <><polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><polyline points="17 18 23 18 23 12" /></>,
-        'minus': <line x1="5" y1="12" x2="19" y2="12" />,
-        'clock': <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
-        'check': <polyline points="20 6 9 17 4 12" />,
-        'alert-triangle': <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></>,
-      };
-      
-      return (
-        <svg 
-          className={className} 
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="currentColor" 
-          strokeWidth="2" 
-          strokeLinecap="round" 
-          strokeLinejoin="round"
-        >
-          {icons[name] || null}
-        </svg>
-      );
+    // 备用数据
+    const fallbackData = {
+      aShare: {
+        indices: [
+          { name: '上证指数', price: 3256.78, changePercent: 0.85 },
+          { name: '深证成指', price: 10234.56, changePercent: 1.23 },
+          { name: '创业板指', price: 2156.78, changePercent: 1.56 },
+        ],
+        stats: { upCount: 2856, downCount: 2341, limitUpCount: 45, limitDownCount: 8, totalTurnover: '1.25万亿' }
+      },
+      us: {
+        indices: [
+          { name: '道琼斯工业', price: 52759.21, changePercent: -1.32 },
+          { name: '纳斯达克综合', price: 26067.17, changePercent: -1.00 },
+          { name: '标普500', price: 7641.16, changePercent: -0.87 },
+        ]
+      },
+      metals: {
+        metals: [
+          { name: '黄金', price: 4490.87, changePercent: -0.68 },
+          { name: '白银', price: 63.50, changePercent: -3.27 },
+        ]
+      }
     };
 
-    // ============ 新闻与热点分析数据（静态展示 + 定期更新）============
-    const hotAnalysisData = {
+    // ============ 新闻和热点数据 ============
+    const hotData = {
       globalNews: [
         { id: 'g1', title: '美联储7月会议纪要释放偏鹰信号', source: '美联储官网', time: '02:15', impact: 'neutral', region: 'global', insight: '降息节奏或慢于预期，短期压制风险资产，但年内仍有降息空间，中长期利好黄金。' },
         { id: 'g2', title: '美伊临时谅解备忘录到期，霍尔木兹海峡航运风险上升', source: '环球时报', time: '23:40', impact: 'negative', region: 'global', insight: '地缘风险加剧推升油价与通胀预期，利好原油、黄金等避险资产。' },
         { id: 'g3', title: '英伟达Q2财报超预期，AI算力需求持续强劲', source: '彭博', time: '21:30', impact: 'positive', region: 'global', insight: 'AI算力景气度验证，光模块、服务器、芯片产业链持续受益。' },
       ],
       aShareNews: [
-        { id: 'a1', title: '九部门联合发文激发县域消费活力', source: '经济日报', time: '08:45', impact: 'positive', region: 'a-share', insight: '县域消费政策加码，零售、物流、家电下乡相关标的有望受益。', relatedStocks: [
-          { code: '600415', name: '小商品城' }, { code: '002024', name: '苏宁易购' }, { code: '000851', name: '高鸿股份' },
-        ]},
-        { id: 'a2', title: '公积金新政正式公布，优化住房公积金使用政策', source: '新华社', time: '09:30', impact: 'positive', region: 'a-share', insight: '政策托底地产预期，关注优质房企及家居建材产业链修复机会。', relatedStocks: [
-          { code: '000002', name: '万科A' }, { code: '600048', name: '保利发展' }, { code: '001979', name: '招商蛇口' },
-        ]},
-        { id: 'a3', title: 'AI算力需求持续爆发，光模块厂商订单饱满', source: '证券时报', time: '10:15', impact: 'positive', region: 'a-share', insight: 'AI算力高景气度延续，光模块作为核心环节业绩确定性最强。', relatedStocks: [
-          { code: '300308', name: '中际旭创' }, { code: '300502', name: '新易盛' }, { code: '002463', name: '沪电股份' },
-        ]},
-        { id: 'a4', title: '半导体设备国产化加速，多家公司中标晶圆厂订单', source: '上海证券报', time: '11:00', impact: 'positive', region: 'a-share', insight: '国产替代进程加速，半导体设备材料板块迎来业绩+估值双重修复。', relatedStocks: [
-          { code: '688328', name: '深科达' }, { code: '600460', name: '士兰微' }, { code: '688256', name: '寒武纪' },
-        ]},
-        { id: 'a5', title: '黄金价格再创历史新高，贵金属板块走强', source: '财联社', time: '13:20', impact: 'positive', region: 'a-share', insight: '降息+避险双轮驱动，金价中长期上行趋势明确，黄金股弹性更大。', relatedStocks: [
-          { code: '601899', name: '紫金矿业' }, { code: '002716', name: '湖南白银' }, { code: '600547', name: '山东黄金' },
-        ]},
-        { id: 'a6', title: '消费电子旺季来临，果链公司订单增长', source: '21世纪经济报道', time: '14:00', impact: 'positive', region: 'a-share', insight: '苹果新品周期叠加AI手机预期，消费电子产业链有望迎来估值修复。', relatedStocks: [
-          { code: '002241', name: '歌尔股份' }, { code: '002475', name: '立讯精密' }, { code: '300136', name: '信维通信' },
-        ]},
+        { id: 'a1', title: '九部门联合发文激发县域消费活力', source: '经济日报', time: '08:45', impact: 'positive', region: 'a-share', insight: '县域消费政策加码，零售、物流、家电下乡相关标的有望受益。', relatedStocks: [{ code: '600415', name: '小商品城' }, { code: '002024', name: '苏宁易购' }, { code: '000851', name: '高鸿股份' }]},
+        { id: 'a2', title: '公积金新政正式公布，优化住房公积金使用政策', source: '新华社', time: '09:30', impact: 'positive', region: 'a-share', insight: '政策托底地产预期，关注优质房企及家居建材产业链修复机会。', relatedStocks: [{ code: '000002', name: '万科A' }, { code: '600048', name: '保利发展' }, { code: '001979', name: '招商蛇口' }]},
+        { id: 'a3', title: 'AI算力需求持续爆发，光模块厂商订单饱满', source: '证券时报', time: '10:15', impact: 'positive', region: 'a-share', insight: 'AI算力高景气度延续，光模块作为核心环节业绩确定性最强。', relatedStocks: [{ code: '300308', name: '中际旭创' }, { code: '300502', name: '新易盛' }, { code: '002463', name: '沪电股份' }]},
+        { id: 'a4', title: '半导体设备国产化加速，多家公司中标晶圆厂订单', source: '上海证券报', time: '11:00', impact: 'positive', region: 'a-share', insight: '国产替代进程加速，半导体设备材料板块迎来业绩+估值双重修复。', relatedStocks: [{ code: '688328', name: '深科达' }, { code: '600460', name: '士兰微' }, { code: '688256', name: '寒武纪' }]},
+        { id: 'a5', title: '黄金价格再创历史新高，贵金属板块走强', source: '财联社', time: '13:20', impact: 'positive', region: 'a-share', insight: '降息+避险双轮驱动，金价中长期上行趋势明确，黄金股弹性更大。', relatedStocks: [{ code: '601899', name: '紫金矿业' }, { code: '002716', name: '湖南白银' }, { code: '600547', name: '山东黄金' }]},
+        { id: 'a6', title: '消费电子旺季来临，果链公司订单增长', source: '21世纪经济报道', time: '14:00', impact: 'positive', region: 'a-share', insight: '苹果新品周期叠加AI手机预期，消费电子产业链有望迎来估值修复。', relatedStocks: [{ code: '002241', name: '歌尔股份' }, { code: '002475', name: '立讯精密' }, { code: '300136', name: '信维通信' }]},
       ],
       hotSectors: [
-        { name: '光模块/算力', score: 95, reason: '英伟达财报超预期+中际旭创新易盛主力资金净流入超60亿', trend: 'up', confidence: 'high' },
-        { name: '半导体/芯片', score: 88, reason: '士兰微涨停+寒武纪兆易创新资金大幅流入+国产化加速', trend: 'up', confidence: 'high' },
-        { name: '贵金属/有色', score: 82, reason: '黄金创新高+湖南白银涨停+紫金矿业资金流入9亿', trend: 'up', confidence: 'medium' },
-        { name: 'PCB/电子', score: 78, reason: '沪电股份生益科技双双大涨+AI服务器需求拉动', trend: 'up', confidence: 'medium' },
-        { name: '消费电子', score: 72, reason: '歌尔股份涨超6%+苹果新品旺季预期', trend: 'up', confidence: 'medium' },
+        { name: '光模块/算力', score: 95, reason: '英伟达财报超预期+中际旭创新易盛主力资金净流入超60亿', trend: 'up' },
+        { name: '半导体/芯片', score: 88, reason: '士兰微涨停+寒武纪兆易创新资金大幅流入+国产化加速', trend: 'up' },
+        { name: '贵金属/有色', score: 82, reason: '黄金创新高+湖南白银涨停+紫金矿业资金流入9亿', trend: 'up' },
+        { name: 'PCB/电子', score: 78, reason: '沪电股份生益科技双双大涨+AI服务器需求拉动', trend: 'up' },
+        { name: '消费电子', score: 72, reason: '歌尔股份涨超6%+苹果新品旺季预期', trend: 'up' },
       ],
-      strongSectorsForecast: [
+      strongForecast: [
         { rank: 1, name: '光模块/AI算力', probability: '85%', catalysts: ['英伟达AI芯片持续超预期', '国内云厂商资本开支上调', '800G/1.6T光模块渗透率提升'], keyStocks: ['中际旭创', '新易盛', '天孚通信'] },
         { rank: 2, name: '半导体设备/材料', probability: '78%', catalysts: ['国产替代加速推进', '晶圆厂扩产招标启动', '先进制程突破'], keyStocks: ['北方华创', '中微公司', '拓荆科技'] },
         { rank: 3, name: '贵金属/黄金', probability: '72%', catalysts: ['美联储降息预期升温', '地缘政治风险持续', '央行购金需求强劲'], keyStocks: ['紫金矿业', '山东黄金', '赤峰黄金'] },
@@ -289,701 +194,436 @@
     };
 
     const hotConcepts = [
-      { rank: 1, name: 'AI算力', change: 4.85, isHot: true, stockCount: 156, netInflow: 85.6, leaders: [
-        { code: '300308', name: '中际旭创', change: 4.29 },
-        { code: '300502', name: '新易盛', change: 6.76 },
-        { code: '688256', name: '寒武纪-U', change: 2.39 },
-      ]},
-      { rank: 2, name: '光模块', change: 5.62, isHot: true, stockCount: 42, netInflow: 76.8, leaders: [
-        { code: '300308', name: '中际旭创', change: 4.29 },
-        { code: '300502', name: '新易盛', change: 6.76 },
-        { code: '300394', name: '天孚通信', change: 3.85 },
-      ]},
-      { rank: 3, name: '半导体', change: 3.28, isHot: true, stockCount: 328, netInflow: 45.2, leaders: [
-        { code: '600460', name: '士兰微', change: 9.99 },
-        { code: '688328', name: '深科达', change: 19.99 },
-        { code: '603986', name: '兆易创新', change: 1.38 },
-      ]},
-      { rank: 4, name: '贵金属', change: 2.95, isHot: true, stockCount: 36, netInflow: 28.5, leaders: [
-        { code: '002716', name: '湖南白银', change: 10.03 },
-        { code: '601899', name: '紫金矿业', change: 2.69 },
-        { code: '600547', name: '山东黄金', change: 2.15 },
-      ]},
-      { rank: 5, name: 'PCB/服务器', change: 2.78, isHot: false, stockCount: 58, netInflow: 22.4, leaders: [
-        { code: '002463', name: '沪电股份', change: 6.03 },
-        { code: '600183', name: '生益科技', change: 5.16 },
-        { code: '002916', name: '深南电路', change: 4.25 },
-      ]},
-      { rank: 6, name: '消费电子', change: 2.45, isHot: false, stockCount: 186, netInflow: 18.9, leaders: [
-        { code: '002241', name: '歌尔股份', change: 6.27 },
-        { code: '002475', name: '立讯精密', change: 3.42 },
-        { code: '300136', name: '信维通信', change: 2.85 },
-      ]},
-      { rank: 7, name: '存储芯片', change: 2.12, isHot: false, stockCount: 48, netInflow: 15.6, leaders: [
-        { code: '603986', name: '兆易创新', change: 1.38 },
-        { code: '300223', name: '北京君正', change: 3.56 },
-        { code: '688525', name: '佰维存储', change: 4.12 },
-      ]},
-      { rank: 8, name: '医药生物', change: 1.85, isHot: false, stockCount: 425, netInflow: 12.8, leaders: [
-        { code: '688185', name: '康希诺', change: 20.01 },
-        { code: '300016', name: '北陆药业', change: 20.00 },
-        { code: '688137', name: '近岸蛋白', change: 20.00 },
-      ]},
-      { rank: 9, name: '机器人', change: 1.52, isHot: false, stockCount: 112, netInflow: 8.5, leaders: [
-        { code: '688017', name: '绿的谐波', change: 5.68 },
-        { code: '002747', name: '埃斯顿', change: 3.45 },
-        { code: '300124', name: '汇川技术', change: 2.18 },
-      ]},
-      { rank: 10, name: '新能源汽车', change: 0.95, isHot: false, stockCount: 256, netInflow: 5.2, leaders: [
-        { code: '300750', name: '宁德时代', change: 1.25 },
-        { code: '002594', name: '比亚迪', change: 0.85 },
-        { code: '601127', name: '赛力斯', change: 2.35 },
-      ]},
+      { rank: 1, name: 'AI算力', change: 4.85, isHot: true, stockCount: 156, netInflow: 85.6, leaders: [{ code: '300308', name: '中际旭创', change: 4.29 }, { code: '300502', name: '新易盛', change: 6.76 }, { code: '688256', name: '寒武纪-U', change: 2.39 }]},
+      { rank: 2, name: '光模块', change: 5.62, isHot: true, stockCount: 42, netInflow: 76.8, leaders: [{ code: '300308', name: '中际旭创', change: 4.29 }, { code: '300502', name: '新易盛', change: 6.76 }, { code: '300394', name: '天孚通信', change: 3.85 }]},
+      { rank: 3, name: '半导体', change: 3.28, isHot: true, stockCount: 328, netInflow: 45.2, leaders: [{ code: '600460', name: '士兰微', change: 9.99 }, { code: '688328', name: '深科达', change: 19.99 }, { code: '603986', name: '兆易创新', change: 1.38 }]},
+      { rank: 4, name: '贵金属', change: 2.95, isHot: true, stockCount: 36, netInflow: 28.5, leaders: [{ code: '002716', name: '湖南白银', change: 10.03 }, { code: '601899', name: '紫金矿业', change: 2.69 }, { code: '600547', name: '山东黄金', change: 2.15 }]},
+      { rank: 5, name: 'PCB/服务器', change: 2.78, isHot: false, stockCount: 58, netInflow: 22.4, leaders: [{ code: '002463', name: '沪电股份', change: 6.03 }, { code: '600183', name: '生益科技', change: 5.16 }, { code: '002916', name: '深南电路', change: 4.25 }]},
+      { rank: 6, name: '消费电子', change: 2.45, isHot: false, stockCount: 186, netInflow: 18.9, leaders: [{ code: '002241', name: '歌尔股份', change: 6.27 }, { code: '002475', name: '立讯精密', change: 3.42 }, { code: '300136', name: '信维通信', change: 2.85 }]},
+      { rank: 7, name: '存储芯片', change: 2.12, isHot: false, stockCount: 48, netInflow: 15.6, leaders: [{ code: '603986', name: '兆易创新', change: 1.38 }, { code: '300223', name: '北京君正', change: 3.56 }, { code: '688525', name: '佰维存储', change: 4.12 }]},
+      { rank: 8, name: '医药生物', change: 1.85, isHot: false, stockCount: 425, netInflow: 12.8, leaders: [{ code: '688185', name: '康希诺', change: 20.01 }, { code: '300016', name: '北陆药业', change: 20.00 }, { code: '688137', name: '近岸蛋白', change: 20.00 }]},
+      { rank: 9, name: '机器人', change: 1.52, isHot: false, stockCount: 112, netInflow: 8.5, leaders: [{ code: '688017', name: '绿的谐波', change: 5.68 }, { code: '002747', name: '埃斯顿', change: 3.45 }, { code: '300124', name: '汇川技术', change: 2.18 }]},
+      { rank: 10, name: '新能源汽车', change: 0.95, isHot: false, stockCount: 256, netInflow: 5.2, leaders: [{ code: '300750', name: '宁德时代', change: 1.25 }, { code: '002594', name: '比亚迪', change: 0.85 }, { code: '601127', name: '赛力斯', change: 2.35 }]},
     ];
 
-    // ============ 美股昨夜行情分析卡片 ============
-    const UsMarketAnalysisCard = () => {
-      return (
-        <div className="bg-card rounded-xl p-5 shadow-soft">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center">
-                <Icon name="bar-chart-3" className="w-4 h-4 text-primary" />
-              </div>
-              <h3 className="text-sm font-bold text-foreground">昨夜行情综述</h3>
-            </div>
-            <span className="text-[10px] px-2 py-0.5 bg-fall/10 text-fall rounded-full font-medium">
-              全线收跌
-            </span>
-          </div>
-          
-          <div className="space-y-3">
-            <p className="text-xs text-foreground leading-relaxed">
-              周四（8月20日）美股三大指数全线收跌。道指跌超700点，跌幅1.32%，报52759.21点；纳指跌1.00%，报26067.17点；标普500跌0.87%，报7641.16点。
-            </p>
-            
-            <div className="bg-accent/60 rounded-lg p-3 space-y-1.5">
-              <div className="flex items-start gap-2">
-                <span className="text-fall text-xs mt-0.5 font-bold">•</span>
-                <span className="text-[11px] text-foreground">美联储官员释放偏鹰信号，市场降息预期降温</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-fall text-xs mt-0.5 font-bold">•</span>
-                <span className="text-[11px] text-foreground">美债收益率反弹，10年期收益率上行</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-fall text-xs mt-0.5 font-bold">•</span>
-                <span className="text-[11px] text-foreground">沃尔玛重挫超9%，零售财报不及预期</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-fall text-xs mt-0.5 font-bold">•</span>
-                <span className="text-[11px] text-foreground">美伊紧张局势加剧，油价大涨推升通胀担忧</span>
-              </div>
-            </div>
-            
-            <div className="pt-2 border-t border-border/60">
-              <div className="flex items-center gap-1.5 mb-2">
-                <Icon name="zap" className="w-3.5 h-3.5 text-hot" />
-                <span className="text-[11px] text-muted-foreground font-medium">亮点板块</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <span className="text-[11px] px-2 py-1 bg-rise/10 text-rise rounded-md font-medium">存储芯片</span>
-                <span className="text-[11px] px-2 py-1 bg-rise/10 text-rise rounded-md font-medium">光通信</span>
-                <span className="text-[11px] px-2 py-1 bg-fall/10 text-fall rounded-md font-medium">零售</span>
-                <span className="text-[11px] px-2 py-1 bg-fall/10 text-fall rounded-md font-medium">银行</span>
-              </div>
-            </div>
-          </div>
+    const usSectors = [
+      { name: '能源', change: 1.85 }, { name: '科技', change: -0.65 },
+      { name: '通信服务', change: -0.72 }, { name: '医疗保健', change: -0.78 },
+      { name: '工业', change: -0.95 }, { name: '材料', change: -1.02 },
+      { name: '必需消费', change: -1.15 }, { name: '金融', change: -1.28 },
+      { name: '可选消费', change: -1.65 }, { name: '公用事业', change: -1.35 },
+      { name: '房地产', change: -1.82 },
+    ];
+
+    const lmeMetals = [
+      { name: '期铜', price: 9680, changePercent: -1.00 },
+      { name: '期铝', price: 2560, changePercent: -0.78 },
+      { name: '期锌', price: 2645, changePercent: -1.30 },
+      { name: '期镍', price: 17950, changePercent: -1.37 },
+      { name: '期锡', price: 29100, changePercent: -1.36 },
+    ];
+
+    // ============ 渲染函数 ============
+    function esc(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function renderIndexCard(idx) {
+      const rise = idx.changePercent >= 0;
+      const color = rise ? 'text-rise' : 'text-fall';
+      const barColor = rise ? 'hsl(0 84% 60%)' : 'hsl(142 71% 45%)';
+      return `
+        <div class="relative bg-card rounded-xl p-4 shadow-soft overflow-hidden">
+          <div class="absolute bottom-0 left-0 right-0 h-1" style="background:${barColor}"></div>
+          <div class="text-xs text-muted-foreground mb-1">${esc(idx.name)}</div>
+          <div class="text-2xl font-bold font-din ${color}">${idx.price ? idx.price.toFixed(2) : '--'}</div>
+          <div class="text-xs mt-1 font-medium ${color}">${idx.price ? (rise ? '+' : '') + idx.changePercent.toFixed(2) + '%' : '--'}</div>
         </div>
-      );
-    };
+      `;
+    }
 
-    // ============ 贵金属昨夜行情分析卡片 ============
-    const MetalsAnalysisCard = () => {
-      return (
-        <div className="bg-card rounded-xl p-5 shadow-soft">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-precious/15 flex items-center justify-center">
-                <Icon name="gem" className="w-4 h-4 text-precious" />
-              </div>
-              <h3 className="text-sm font-bold text-foreground">昨夜行情综述</h3>
-            </div>
-            <span className="text-[10px] px-2 py-0.5 bg-rise/10 text-rise rounded-full font-medium">
-              高位震荡
-            </span>
-          </div>
-          
-          <div className="space-y-3">
-            <p className="text-xs text-foreground leading-relaxed">
-              周四（8月20日）国际金价在4500美元关口高位震荡。现货黄金报4490.87美元/盎司，微跌0.68%，此前一日曾大涨4.35%突破4500美元整数关口。白银波动加剧，前一日大涨5.81%后进入整理。
-            </p>
-            
-            <div className="bg-accent/60 rounded-lg p-3 space-y-1.5">
-              <div className="flex items-start gap-2">
-                <span className="text-rise text-xs mt-0.5 font-bold">•</span>
-                <span className="text-[11px] text-foreground">地缘政治风险持续，避险需求支撑金价中长期走势</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-rise text-xs mt-0.5 font-bold">•</span>
-                <span className="text-[11px] text-foreground">美联储降息预期仍是贵金属中期核心驱动力</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-fall text-xs mt-0.5 font-bold">•</span>
-                <span className="text-[11px] text-foreground">短期获利了结压力显现，高位波动加大</span>
-              </div>
-              <div className="flex items-start gap-2">
-                <span className="text-fall text-xs mt-0.5 font-bold">•</span>
-                <span className="text-[11px] text-foreground">工业金属承压，纽约铜跌约1%，经济复苏预期偏弱</span>
-              </div>
-            </div>
-            
-            <div className="pt-2 border-t border-border/60">
-              <div className="flex items-center gap-1.5 mb-2">
-                <Icon name="trending-up" className="w-3.5 h-3.5 text-rise" />
-                <span className="text-[11px] text-muted-foreground font-medium">关注要点</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <span className="text-[11px] px-2 py-1 bg-precious/10 text-precious rounded-md font-medium">金价4500关口</span>
-                <span className="text-[11px] px-2 py-1 bg-rise/10 text-rise rounded-md font-medium">降息预期</span>
-                <span className="text-[11px] px-2 py-1 bg-fall/10 text-fall rounded-md font-medium">铜价承压</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
+    function renderOverview() {
+      const data = state.aShare || fallbackData.aShare;
+      const stats = data.stats;
+      const sectors = hotData.hotSectors;
+      const forecast = hotData.strongForecast;
 
-    // ============ 概览页 ============
-    const OverviewPage = ({ data, loading, onRefresh }) => {
-      const [activeTab, setActiveTab] = useState('hot');
-      const indices = data?.indices || [];
-      const stats = data?.stats || { upCount: 0, downCount: 0, limitUpCount: 0, limitDownCount: 0, totalTurnover: '0' };
+      const hotTabActive = state.hotTab === 'hot';
+      const forecastTabActive = state.hotTab === 'forecast';
 
-      return (
-        <div className="min-h-screen bg-background safe-bottom">
-          <div className="mx-auto max-w-md px-4 py-4 flex flex-col gap-5">
-            {/* 头部 */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Icon name="home" className="w-5 h-5 text-primary" />
-                <h1 className="text-xl font-bold text-foreground">市场概览</h1>
-              </div>
-              <button 
-                onClick={onRefresh}
-                disabled={loading}
-                className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center active:scale-95 transition-transform"
-              >
-                <Icon name="refresh-cw" className={`w-4 h-4 text-primary ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-
-            {/* 主要指数 */}
-            <div className="grid grid-cols-2 gap-3">
-              {indices.map((idx, i) => {
-                const isRising = idx.changePercent >= 0;
-                return (
-                  <div key={i} className="relative bg-card rounded-xl p-4 shadow-soft overflow-hidden">
-                    <div className="absolute bottom-0 left-0 right-0 h-1" style={{ background: isRising ? 'hsl(0 84% 60%)' : 'hsl(142 71% 45%)' }} />
-                    <div className="text-xs text-muted-foreground mb-1">{idx.name}</div>
-                    <div className={`text-2xl font-bold font-din ${isRising ? 'text-rise' : 'text-fall'}`}>
-                      {idx.price ? idx.price.toFixed(2) : '--'}
-                    </div>
-                    <div className={`text-xs mt-1 font-medium ${isRising ? 'text-rise' : 'text-fall'}`}>
-                      {idx.price ? `${isRising ? '+' : ''}${idx.changePercent.toFixed(2)}%` : '--'}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* 市场统计 */}
-            <div className="bg-card rounded-xl p-4 shadow-soft">
-              <div className="grid grid-cols-4 text-center">
-                <div>
-                  <div className="text-rise font-bold font-din text-lg">{stats.upCount}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">上涨家数</div>
+      return `
+        <div class="page ${state.activeTab === 'overview' ? 'active' : ''}" id="page-overview">
+          <div class="min-h-screen bg-background safe-bottom">
+            <div class="mx-auto max-w-md px-4 py-4 flex flex-col gap-5">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  ${icon('home', 'w-5 h-5 text-primary')}
+                  <h1 class="text-xl font-bold text-foreground">市场概览</h1>
                 </div>
-                <div>
-                  <div className="text-fall font-bold font-din text-lg">{stats.downCount}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">下跌家数</div>
-                </div>
-                <div>
-                  <div className="text-rise font-bold font-din text-lg">{stats.limitUpCount}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">涨停</div>
-                </div>
-                <div>
-                  <div className="text-fall font-bold font-din text-lg">{stats.limitDownCount}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">跌停</div>
-                </div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-border/60 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">两市成交额</span>
-                <span className="text-sm font-bold text-foreground font-din">{stats.totalTurnover}</span>
-              </div>
-            </div>
-
-            {/* 今日热点分析卡片 */}
-            <div className="bg-card rounded-xl p-5 shadow-soft overflow-hidden">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-hot/15 flex items-center justify-center">
-                    <Icon name="flame" className="w-4 h-4 text-hot" />
-                  </div>
-                  <h3 className="text-sm font-bold text-foreground">今日热点分析</h3>
-                </div>
-                <span className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
-                  AI 综合研判
-                </span>
-              </div>
-              
-              <div className="flex bg-accent rounded-lg p-0.5 mb-4">
-                <button
-                  onClick={() => setActiveTab('hot')}
-                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${
-                    activeTab === 'hot' ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'
-                  }`}
-                >
-                  热门板块
-                </button>
-                <button
-                  onClick={() => setActiveTab('forecast')}
-                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${
-                    activeTab === 'forecast' ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'
-                  }`}
-                >
-                  走强预测
+                <button onclick="refreshAll()" class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center active:scale-95 transition-transform">
+                  <span class="${state.loading ? 'animate-spin' : ''} text-primary">${icon('refresh-cw')}</span>
                 </button>
               </div>
-              
-              {activeTab === 'hot' && (
-                <div className="space-y-3">
-                  {hotAnalysisData.hotSectors.map((sector, i) => (
-                    <div key={i} className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-5 h-5 rounded text-xs font-bold flex items-center justify-center ${
-                            i < 3 ? 'bg-hot/15 text-hot' : 'bg-accent text-muted-foreground'
-                          }`}>
-                            {i + 1}
-                          </span>
-                          <span className="text-sm font-semibold text-foreground">{sector.name}</span>
-                          {sector.trend === 'up' && (
-                            <span className="text-rise text-xs font-bold">↑</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-16 h-1.5 bg-accent rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-hot to-rise rounded-full" style={{ width: `${sector.score}%` }} />
-                          </div>
-                          <span className="text-xs font-bold text-hot w-7 text-right">{sector.score}</span>
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground pl-7 leading-relaxed">
-                        {sector.reason}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-              
-              {activeTab === 'forecast' && (
-                <div className="space-y-3">
-                  {hotAnalysisData.strongSectorsForecast.map((item, i) => (
-                    <div key={i} className="bg-accent/50 rounded-xl p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-rise to-hot flex items-center justify-center text-white text-xs font-bold">
-                            {item.rank}
-                          </div>
-                          <span className="text-sm font-bold text-foreground">{item.name}</span>
-                        </div>
-                        <span className="text-xs px-2 py-0.5 bg-rise/10 text-rise rounded-full font-bold">
-                          {item.probability}概率
-                        </span>
-                      </div>
-                      <div className="space-y-1 mb-2">
-                        {item.catalysts.map((c, ci) => (
-                          <div key={ci} className="flex items-start gap-1.5">
-                            <span className="text-hot text-xs mt-0.5">•</span>
-                            <span className="text-[11px] text-muted-foreground">{c}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 pt-2 border-t border-border/50">
-                        {item.keyStocks.map((stock, si) => (
-                          <span key={si} className="text-[11px] px-2 py-0.5 bg-primary/10 text-primary rounded-md font-medium">
-                            {stock}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
 
-            {/* 更新时间 */}
-            <div className="flex items-center justify-center gap-1.5">
-              <Icon name="clock" className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[11px] text-muted-foreground">
-                {loading ? '数据更新中...' : `数据来源：新浪财经 · 实时行情`}
-              </span>
+              <div class="grid grid-cols-2 gap-3">
+                ${data.indices.map(renderIndexCard).join('')}
+              </div>
+
+              <div class="bg-card rounded-xl p-4 shadow-soft">
+                <div class="grid grid-cols-4 text-center">
+                  <div><div class="text-rise font-bold font-din text-lg">${stats.upCount}</div><div class="text-[10px] text-muted-foreground mt-0.5">上涨家数</div></div>
+                  <div><div class="text-fall font-bold font-din text-lg">${stats.downCount}</div><div class="text-[10px] text-muted-foreground mt-0.5">下跌家数</div></div>
+                  <div><div class="text-rise font-bold font-din text-lg">${stats.limitUpCount}</div><div class="text-[10px] text-muted-foreground mt-0.5">涨停</div></div>
+                  <div><div class="text-fall font-bold font-din text-lg">${stats.limitDownCount}</div><div class="text-[10px] text-muted-foreground mt-0.5">跌停</div></div>
+                </div>
+                <div class="mt-3 pt-3 border-t border-border/60 flex items-center justify-between">
+                  <span class="text-xs text-muted-foreground">两市成交额</span>
+                  <span class="text-sm font-bold text-foreground font-din">${stats.totalTurnover}</span>
+                </div>
+              </div>
+
+              <div class="bg-card rounded-xl p-5 shadow-soft overflow-hidden">
+                <div class="flex items-center justify-between mb-4">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-hot/15 flex items-center justify-center text-hot">${icon('flame', 'w-4 h-4')}</div>
+                    <h3 class="text-sm font-bold text-foreground">今日热点分析</h3>
+                  </div>
+                  <span class="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">AI 综合研判</span>
+                </div>
+                <div class="flex bg-accent rounded-lg p-0.5 mb-4">
+                  <button onclick="setHotTab('hot')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${hotTabActive ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'}">热门板块</button>
+                  <button onclick="setHotTab('forecast')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${forecastTabActive ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'}">走强预测</button>
+                </div>
+                ${hotTabActive ? `
+                  <div class="space-y-3">
+                    ${sectors.map((s, i) => `
+                      <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                          <div class="flex items-center gap-2">
+                            <span class="w-5 h-5 rounded text-xs font-bold flex items-center justify-center ${i < 3 ? 'bg-hot/15 text-hot' : 'bg-accent text-muted-foreground'}">${i+1}</span>
+                            <span class="text-sm font-semibold text-foreground">${esc(s.name)}</span>
+                            ${s.trend === 'up' ? '<span class="text-rise text-xs font-bold">↑</span>' : ''}
+                          </div>
+                          <div class="flex items-center gap-1.5">
+                            <div class="w-16 h-1.5 bg-accent rounded-full overflow-hidden"><div class="h-full bg-gradient-to-r from-hot to-rise rounded-full" style="width:${s.score}%"></div></div>
+                            <span class="text-xs font-bold text-hot w-7 text-right">${s.score}</span>
+                          </div>
+                        </div>
+                        <p class="text-[11px] text-muted-foreground pl-7 leading-relaxed">${esc(s.reason)}</p>
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : `
+                  <div class="space-y-3">
+                    ${forecast.map(item => `
+                      <div class="bg-accent/50 rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-2">
+                          <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-rise to-hot flex items-center justify-center text-white text-xs font-bold">${item.rank}</div>
+                            <span class="text-sm font-bold text-foreground">${esc(item.name)}</span>
+                          </div>
+                          <span class="text-xs px-2 py-0.5 bg-rise/10 text-rise rounded-full font-bold">${item.probability}概率</span>
+                        </div>
+                        <div class="space-y-1 mb-2">
+                          ${item.catalysts.map(c => `
+                            <div class="flex items-start gap-1.5"><span class="text-hot text-xs mt-0.5">•</span><span class="text-[11px] text-muted-foreground">${esc(c)}</span></div>
+                          `).join('')}
+                        </div>
+                        <div class="flex flex-wrap gap-1.5 pt-2 border-t border-border/50">
+                          ${item.keyStocks.map(ks => `<span class="text-[11px] px-2 py-0.5 bg-primary/10 text-primary rounded-md font-medium">${esc(ks)}</span>`).join('')}
+                        </div>
+                      </div>
+                    `).join('')}
+                  </div>
+                `}
+              </div>
+
+              <div class="flex items-center justify-center gap-1.5">
+                ${icon('clock', 'w-3 h-3 text-muted-foreground')}
+                <span class="text-[11px] text-muted-foreground">${state.loading ? '数据更新中...' : '数据来源：新浪财经 · 实时行情'}</span>
+              </div>
             </div>
           </div>
         </div>
-      );
-    };
+      `;
+    }
 
-    // ============ 美股页 ============
-    const UsStocksPage = ({ data, loading, onRefresh }) => {
-      const indices = data?.indices || [];
-      const sectors = data?.sectors || [
-        { name: '能源', change: 1.85 }, { name: '科技', change: -0.65 },
-        { name: '通信服务', change: -0.72 }, { name: '医疗保健', change: -0.78 },
-        { name: '工业', change: -0.95 }, { name: '材料', change: -1.02 },
-        { name: '必需消费', change: -1.15 }, { name: '金融', change: -1.28 },
-        { name: '可选消费', change: -1.65 }, { name: '公用事业', change: -1.35 },
-        { name: '房地产', change: -1.82 },
-      ];
-
-      return (
-        <div className="min-h-screen bg-background safe-bottom">
-          <div className="mx-auto max-w-md px-4 py-4 flex flex-col gap-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Icon name="trending-up" className="w-5 h-5 text-primary" />
-                <h1 className="text-xl font-bold text-foreground">美股</h1>
+    function renderUsPage() {
+      const data = state.us || fallbackData.us;
+      return `
+        <div class="page ${state.activeTab === 'us' ? 'active' : ''}" id="page-us">
+          <div class="min-h-screen bg-background safe-bottom">
+            <div class="mx-auto max-w-md px-4 py-4 flex flex-col gap-5">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  ${icon('trending-up', 'w-5 h-5 text-primary')}
+                  <h1 class="text-xl font-bold text-foreground">美股</h1>
+                </div>
+                <button onclick="refreshAll()" class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center active:scale-95 transition-transform">
+                  <span class="${state.loading ? 'animate-spin' : ''} text-primary">${icon('refresh-cw')}</span>
+                </button>
               </div>
-              <button 
-                onClick={onRefresh}
-                disabled={loading}
-                className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center active:scale-95 transition-transform"
-              >
-                <Icon name="refresh-cw" className={`w-4 h-4 text-primary ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
 
-            {/* 昨夜行情综述 */}
-            <UsMarketAnalysisCard />
-
-            <div className="grid grid-cols-2 gap-3">
-              {indices.map((idx, i) => {
-                const isRising = idx.changePercent >= 0;
-                return (
-                  <div key={i} className="relative bg-card rounded-xl p-4 shadow-soft overflow-hidden">
-                    <div className="absolute bottom-0 left-0 right-0 h-1" style={{ background: isRising ? 'hsl(0 84% 60%)' : 'hsl(142 71% 45%)' }} />
-                    <div className="text-xs text-muted-foreground mb-1">{idx.name}</div>
-                    <div className={`text-xl font-bold font-din ${isRising ? 'text-rise' : 'text-fall'}`}>
-                      {idx.price ? idx.price.toFixed(2) : '--'}
-                    </div>
-                    <div className={`text-xs mt-1 font-medium ${isRising ? 'text-rise' : 'text-fall'}`}>
-                      {idx.price ? `${isRising ? '+' : ''}${idx.changePercent.toFixed(2)}%` : '--'}
+              <div class="bg-card rounded-xl p-5 shadow-soft">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center text-primary">${icon('bar-chart-3', 'w-4 h-4')}</div>
+                    <h3 class="text-sm font-bold text-foreground">昨夜行情综述</h3>
+                  </div>
+                  <span class="text-[10px] px-2 py-0.5 bg-fall/10 text-fall rounded-full font-medium">全线收跌</span>
+                </div>
+                <div class="space-y-3">
+                  <p class="text-xs text-foreground leading-relaxed">周四（8月20日）美股三大指数全线收跌。道指跌超700点，跌幅1.32%，报52759.21点；纳指跌1.00%，报26067.17点；标普500跌0.87%，报7641.16点。</p>
+                  <div class="bg-accent/60 rounded-lg p-3 space-y-1.5">
+                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">美联储官员释放偏鹰信号，市场降息预期降温</span></div>
+                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">美债收益率反弹，10年期收益率上行</span></div>
+                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">沃尔玛重挫超9%，零售财报不及预期</span></div>
+                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">美伊紧张局势加剧，油价大涨推升通胀担忧</span></div>
+                  </div>
+                  <div class="pt-2 border-t border-border/60">
+                    <div class="flex items-center gap-1.5 mb-2">${icon('zap', 'w-3.5 h-3.5 text-hot')}<span class="text-[11px] text-muted-foreground font-medium">亮点板块</span></div>
+                    <div class="flex flex-wrap gap-1.5">
+                      <span class="text-[11px] px-2 py-1 bg-rise/10 text-rise rounded-md font-medium">存储芯片</span>
+                      <span class="text-[11px] px-2 py-1 bg-rise/10 text-rise rounded-md font-medium">光通信</span>
+                      <span class="text-[11px] px-2 py-1 bg-fall/10 text-fall rounded-md font-medium">零售</span>
+                      <span class="text-[11px] px-2 py-1 bg-fall/10 text-fall rounded-md font-medium">银行</span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-
-            <div className="bg-card rounded-xl p-5 shadow-soft">
-              <h3 className="text-sm font-semibold text-foreground mb-4">板块表现</h3>
-              <div className="space-y-3">
-                {sectors.map((s, i) => {
-                  const isRising = s.change >= 0;
-                  return (
-                    <div key={i}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-foreground">{s.name}</span>
-                        <span className={`text-sm font-semibold font-din ${isRising ? 'text-rise' : 'text-fall'}`}>
-                          {isRising ? '+' : ''}{s.change.toFixed(2)}%
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-accent rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${isRising ? 'bg-rise' : 'bg-fall'}`}
-                          style={{ width: `${Math.min(100, Math.abs(s.change) * 40)}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-center justify-center gap-1.5">
-              <Icon name="clock" className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[11px] text-muted-foreground">
-                数据来源：新浪财经 · 实时行情
-              </span>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    // ============ 有色页 ============
-    const MetalsPage = ({ data, loading, onRefresh }) => {
-      const metals = data?.metals || [];
-      const lme = [
-        { name: '期铜', price: 9680, change: -98, changePercent: -1.00 },
-        { name: '期铝', price: 2560, change: -20, changePercent: -0.78 },
-        { name: '期锌', price: 2645, change: -35, changePercent: -1.30 },
-        { name: '期镍', price: 17950, change: -250, changePercent: -1.37 },
-        { name: '期锡', price: 29100, change: -400, changePercent: -1.36 },
-      ];
-
-      return (
-        <div className="min-h-screen bg-background safe-bottom">
-          <div className="mx-auto max-w-md px-4 py-4 flex flex-col gap-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Icon name="gem" className="w-5 h-5 text-precious" />
-                <h1 className="text-xl font-bold text-foreground">有色金属</h1>
+              <div class="grid grid-cols-2 gap-3">
+                ${data.indices.map(renderIndexCard).join('')}
               </div>
-              <button 
-                onClick={onRefresh}
-                disabled={loading}
-                className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center active:scale-95 transition-transform"
-              >
-                <Icon name="refresh-cw" className={`w-4 h-4 text-primary ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
 
-            {/* 昨夜行情综述 */}
-            <MetalsAnalysisCard />
-
-            <div className="grid grid-cols-2 gap-3">
-              {metals.map((m, i) => {
-                const isRising = m.changePercent >= 0;
-                return (
-                  <div
-                    key={i}
-                    className="relative rounded-xl p-4 overflow-hidden"
-                    style={{ background: 'linear-gradient(135deg, hsl(43 96% 62%), hsl(43 96% 50%))' }}
-                  >
-                    <div className="text-white/80 text-xs mb-1">{m.name}</div>
-                    <div className="text-white text-xl font-bold font-din">{m.price ? m.price.toFixed(2) : '--'}</div>
-                    <div className="text-white/90 text-xs mt-1 font-medium">
-                      {m.price ? `${isRising ? '+' : ''}${m.changePercent.toFixed(2)}%` : '--'}
-                    </div>
-                    <div className="text-white/60 text-xs mt-0.5">美元/盎司</div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="bg-card rounded-xl p-5 shadow-soft">
-              <h3 className="text-sm font-semibold text-foreground mb-4">LME 期货</h3>
-              <div className="space-y-3">
-                {lme.map((m, i) => {
-                  const isRising = m.changePercent >= 0;
-                  return (
-                    <div key={i} className="flex items-center justify-between">
+              <div class="bg-card rounded-xl p-5 shadow-soft">
+                <h3 class="text-sm font-semibold text-foreground mb-4">板块表现</h3>
+                <div class="space-y-3">
+                  ${usSectors.map(s => {
+                    const rise = s.change >= 0;
+                    return `
                       <div>
-                        <span className="text-sm text-foreground font-medium">{m.name}</span>
-                        <span className="text-xs text-muted-foreground ml-2">${m.price}</span>
+                        <div class="flex items-center justify-between mb-1">
+                          <span class="text-sm text-foreground">${esc(s.name)}</span>
+                          <span class="text-sm font-semibold font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${s.change.toFixed(2)}%</span>
+                        </div>
+                        <div class="h-1.5 bg-accent rounded-full overflow-hidden">
+                          <div class="h-full rounded-full ${rise ? 'bg-rise' : 'bg-fall'}" style="width:${Math.min(100, Math.abs(s.change) * 40)}%"></div>
+                        </div>
                       </div>
-                      <span className={`text-sm font-semibold font-din ${isRising ? 'text-rise' : 'text-fall'}`}>
-                        {isRising ? '+' : ''}{m.changePercent.toFixed(2)}%
-                      </span>
-                    </div>
-                  );
-                })}
+                    `;
+                  }).join('')}
+                </div>
               </div>
-            </div>
-
-            <div className="flex items-center justify-center gap-1.5">
-              <Icon name="clock" className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[11px] text-muted-foreground">
-                数据来源：新浪财经 · 实时行情
-              </span>
             </div>
           </div>
         </div>
-      );
-    };
+      `;
+    }
 
-    // ============ 新闻页 ============
-    const NewsPage = () => {
-      // 合并A股和国际新闻，按时间排序
-      const allNews = [
-        ...hotAnalysisData.aShareNews,
-        ...hotAnalysisData.globalNews,
-      ].sort((a, b) => b.time.localeCompare(a.time));
-
-      return (
-        <div className="min-h-screen bg-background safe-bottom">
-          <div className="mx-auto max-w-md px-4 py-4 flex flex-col gap-4">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <Icon name="newspaper" className="w-5 h-5 text-hot" />
-                <h1 className="text-xl font-bold text-foreground">财经新闻</h1>
+    function renderMetalsPage() {
+      const data = state.metals || fallbackData.metals;
+      return `
+        <div class="page ${state.activeTab === 'metals' ? 'active' : ''}" id="page-metals">
+          <div class="min-h-screen bg-background safe-bottom">
+            <div class="mx-auto max-w-md px-4 py-4 flex flex-col gap-5">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  ${icon('gem', 'w-5 h-5 text-precious')}
+                  <h1 class="text-xl font-bold text-foreground">有色金属</h1>
+                </div>
+                <button onclick="refreshAll()" class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center active:scale-95 transition-transform">
+                  <span class="${state.loading ? 'animate-spin' : ''} text-primary">${icon('refresh-cw')}</span>
+                </button>
               </div>
-              <span className="text-xs text-muted-foreground">
-                A股 + 全球
-              </span>
-            </div>
 
-            <div className="space-y-3">
-              {allNews.map((item, i) => {
-                const isAShare = item.region === 'a-share';
-                const impactColor = item.impact === 'positive' ? 'text-rise' : item.impact === 'negative' ? 'text-fall' : 'text-muted-foreground';
-                const impactIcon = item.impact === 'positive' ? 'trending-up' : item.impact === 'negative' ? 'trending-down' : 'minus';
-                
-                return (
-                  <div key={item.id} className="bg-card rounded-xl p-4 shadow-soft">
-                    <div className="flex items-start gap-3 mb-2">
-                      <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${
-                        item.impact === 'positive' ? 'bg-rise/10' : item.impact === 'negative' ? 'bg-fall/10' : 'bg-accent'
-                      }`}>
-                        <Icon name={impactIcon} className={`w-4 h-4 ${impactColor}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                            isAShare ? 'bg-primary/10 text-primary' : 'bg-accent text-muted-foreground'
-                          }`}>
-                            {isAShare ? 'A股' : '全球'}
-                          </span>
-                          {item.impact === 'positive' && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-rise/10 text-rise rounded font-medium">
-                              利好
-                            </span>
-                          )}
-                          {item.impact === 'negative' && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-fall/10 text-fall rounded font-medium">
-                              利空
-                            </span>
-                          )}
-                        </div>
-                        <h3 className="text-sm font-semibold text-foreground leading-snug">{item.title}</h3>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 mb-3 ml-10">
-                      <span className="text-xs text-muted-foreground">{item.source}</span>
-                      <span className="w-1 h-1 rounded-full bg-border" />
-                      <span className="text-xs text-muted-foreground">{item.time}</span>
-                    </div>
-                    
-                    {/* 一句话解读 */}
-                    {item.insight && (
-                      <div className="ml-10 mb-3 px-3 py-2 bg-accent/60 rounded-lg border-l-2 border-primary">
-                        <div className="flex items-start gap-1.5">
-                          <Icon name="lightbulb" className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
-                          <p className="text-[11px] text-foreground leading-relaxed">
-                            {item.insight}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* 关联个股 */}
-                    {item.relatedStocks && item.relatedStocks.length > 0 && (
-                      <div className="ml-10 pt-3 border-t border-border/60">
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <Icon name="link-2" className="w-3 h-3 text-muted-foreground" />
-                          <span className="text-[11px] text-muted-foreground font-medium">相关个股</span>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {item.relatedStocks.map((stock, si) => (
-                            <div
-                              key={si}
-                              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-accent/80 rounded-lg"
-                            >
-                              <span className="text-xs font-medium text-foreground">{stock.name}</span>
-                              <span className="text-[10px] text-muted-foreground font-din">{stock.code}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+              <div class="bg-card rounded-xl p-5 shadow-soft">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-precious/15 flex items-center justify-center text-precious">${icon('gem', 'w-4 h-4')}</div>
+                    <h3 class="text-sm font-bold text-foreground">昨夜行情综述</h3>
                   </div>
-                );
-              })}
+                  <span class="text-[10px] px-2 py-0.5 bg-rise/10 text-rise rounded-full font-medium">高位震荡</span>
+                </div>
+                <div class="space-y-3">
+                  <p class="text-xs text-foreground leading-relaxed">周四（8月20日）国际金价在4500美元关口高位震荡。现货黄金报4490.87美元/盎司，微跌0.68%，此前一日曾大涨4.35%突破4500美元整数关口。白银波动加剧，前一日大涨5.81%后进入整理。</p>
+                  <div class="bg-accent/60 rounded-lg p-3 space-y-1.5">
+                    <div class="flex items-start gap-2"><span class="text-rise text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">地缘政治风险持续，避险需求支撑金价中长期走势</span></div>
+                    <div class="flex items-start gap-2"><span class="text-rise text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">美联储降息预期仍是贵金属中期核心驱动力</span></div>
+                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">短期获利了结压力显现，高位波动加大</span></div>
+                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">工业金属承压，纽约铜跌约1%，经济复苏预期偏弱</span></div>
+                  </div>
+                  <div class="pt-2 border-t border-border/60">
+                    <div class="flex items-center gap-1.5 mb-2">${icon('trending-up', 'w-3.5 h-3.5 text-rise')}<span class="text-[11px] text-muted-foreground font-medium">关注要点</span></div>
+                    <div class="flex flex-wrap gap-1.5">
+                      <span class="text-[11px] px-2 py-1 bg-precious/10 text-precious rounded-md font-medium">金价4500关口</span>
+                      <span class="text-[11px] px-2 py-1 bg-rise/10 text-rise rounded-md font-medium">降息预期</span>
+                      <span class="text-[11px] px-2 py-1 bg-fall/10 text-fall rounded-md font-medium">铜价承压</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                ${data.metals.map(m => {
+                  const rise = m.changePercent >= 0;
+                  return `
+                    <div class="relative rounded-xl p-4 overflow-hidden" style="background: linear-gradient(135deg, hsl(43 96% 62%), hsl(43 96% 50%))">
+                      <div class="text-white/80 text-xs mb-1">${esc(m.name)}</div>
+                      <div class="text-white text-xl font-bold font-din">${m.price ? m.price.toFixed(2) : '--'}</div>
+                      <div class="text-white/90 text-xs mt-1 font-medium">${m.price ? (rise ? '+' : '') + m.changePercent.toFixed(2) + '%' : '--'}</div>
+                      <div class="text-white/60 text-xs mt-0.5">美元/盎司</div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+
+              <div class="bg-card rounded-xl p-5 shadow-soft">
+                <h3 class="text-sm font-semibold text-foreground mb-4">LME 期货</h3>
+                <div class="space-y-3">
+                  ${lmeMetals.map(m => {
+                    const rise = m.changePercent >= 0;
+                    return `
+                      <div class="flex items-center justify-between">
+                        <div><span class="text-sm text-foreground font-medium">${esc(m.name)}</span><span class="text-xs text-muted-foreground ml-2">$${m.price}</span></div>
+                        <span class="text-sm font-semibold font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${m.changePercent.toFixed(2)}%</span>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      );
-    };
+      `;
+    }
 
-    // ============ 概念页 ============
-    const ConceptsPage = () => {
-      return (
-        <div className="min-h-screen bg-background safe-bottom">
-          <div className="mx-auto max-w-md px-4 py-4 flex flex-col gap-4">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <Icon name="lightbulb" className="w-5 h-5 text-fall" />
-                <h1 className="text-xl font-bold text-foreground">热门概念</h1>
+    function renderNewsPage() {
+      const allNews = [...hotData.aShareNews, ...hotData.globalNews].sort((a, b) => b.time.localeCompare(a.time));
+      return `
+        <div class="page ${state.activeTab === 'news' ? 'active' : ''}" id="page-news">
+          <div class="min-h-screen bg-background safe-bottom">
+            <div class="mx-auto max-w-md px-4 py-4 flex flex-col gap-4">
+              <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-2">
+                  ${icon('newspaper', 'w-5 h-5 text-hot')}
+                  <h1 class="text-xl font-bold text-foreground">财经新闻</h1>
+                </div>
+                <span class="text-xs text-muted-foreground">A股 + 全球</span>
               </div>
-              <span className="text-xs text-muted-foreground">
-                最热 10 个板块
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {hotConcepts.map((concept, i) => {
-                const isRising = concept.change >= 0;
-                return (
-                  <div key={i} className="bg-card rounded-xl p-4 shadow-soft">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <span className={`w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center ${
-                          i < 3 ? 'bg-hot/15 text-hot' : 'bg-accent text-muted-foreground'
-                        }`}>
-                          {concept.rank}
-                        </span>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-foreground">{concept.name}</span>
-                            {concept.isHot && (
-                              <span className="text-[9px] px-1.5 py-0.5 bg-hot/15 text-hot rounded font-bold">
-                                HOT
-                              </span>
-                            )}
+              <div class="space-y-3">
+                ${allNews.map(item => {
+                  const isAShare = item.region === 'a-share';
+                  const impactColor = item.impact === 'positive' ? 'text-rise' : item.impact === 'negative' ? 'text-fall' : 'text-muted-foreground';
+                  const impactIconName = item.impact === 'positive' ? 'trending-up' : item.impact === 'negative' ? 'trending-down' : 'minus';
+                  const impactBg = item.impact === 'positive' ? 'bg-rise/10' : item.impact === 'negative' ? 'bg-fall/10' : 'bg-accent';
+                  return `
+                    <div class="bg-card rounded-xl p-4 shadow-soft">
+                      <div class="flex items-start gap-3 mb-2">
+                        <div class="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${impactBg} ${impactColor}">${icon(impactIconName, 'w-4 h-4')}</div>
+                        <div class="flex-1 min-w-0">
+                          <div class="flex items-center gap-2 mb-1">
+                            <span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${isAShare ? 'bg-primary/10 text-primary' : 'bg-accent text-muted-foreground'}">${isAShare ? 'A股' : '全球'}</span>
+                            ${item.impact === 'positive' ? '<span class="text-[10px] px-1.5 py-0.5 bg-rise/10 text-rise rounded font-medium">利好</span>' : ''}
+                            ${item.impact === 'negative' ? '<span class="text-[10px] px-1.5 py-0.5 bg-fall/10 text-fall rounded font-medium">利空</span>' : ''}
                           </div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5">
-                            {concept.stockCount}只 · 净流入{concept.netInflow}亿
-                          </div>
+                          <h3 class="text-sm font-semibold text-foreground leading-snug">${esc(item.title)}</h3>
                         </div>
                       </div>
-                      <span className={`text-lg font-bold font-din ${isRising ? 'text-rise' : 'text-fall'}`}>
-                        {isRising ? '+' : ''}{concept.change.toFixed(2)}%
-                      </span>
-                    </div>
-                    
-                    {/* 龙头股 */}
-                    <div className="pt-3 border-t border-border/60">
-                      <div className="text-[11px] text-muted-foreground mb-2">龙头股</div>
-                      <div className="flex gap-2">
-                        {concept.leaders.map((stock, si) => {
-                          const stockRising = stock.change >= 0;
-                          return (
-                            <div key={si} className="flex-1 bg-accent/60 rounded-lg p-2">
-                              <div className="text-xs font-medium text-foreground truncate">{stock.name}</div>
-                              <div className="flex items-center justify-between mt-1">
-                                <span className="text-[10px] text-muted-foreground font-din">{stock.code}</span>
-                                <span className={`text-[11px] font-bold font-din ${stockRising ? 'text-rise' : 'text-fall'}`}>
-                                  {stockRising ? '+' : ''}{stock.change.toFixed(2)}%
-                                </span>
+                      <div class="flex items-center gap-2 mb-3 ml-10">
+                        <span class="text-xs text-muted-foreground">${esc(item.source)}</span>
+                        <span class="w-1 h-1 rounded-full bg-border"></span>
+                        <span class="text-xs text-muted-foreground">${esc(item.time)}</span>
+                      </div>
+                      ${item.insight ? `
+                        <div class="ml-10 mb-3 px-3 py-2 bg-accent/60 rounded-lg border-l-2 border-primary">
+                          <div class="flex items-start gap-1.5">
+                            ${icon('lightbulb', 'w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5')}
+                            <p class="text-[11px] text-foreground leading-relaxed">${esc(item.insight)}</p>
+                          </div>
+                        </div>
+                      ` : ''}
+                      ${item.relatedStocks && item.relatedStocks.length > 0 ? `
+                        <div class="ml-10 pt-3 border-t border-border/60">
+                          <div class="flex items-center gap-1.5 mb-2">${icon('link-2', 'w-3 h-3 text-muted-foreground')}<span class="text-[11px] text-muted-foreground font-medium">相关个股</span></div>
+                          <div class="flex flex-wrap gap-2">
+                            ${item.relatedStocks.map(s => `
+                              <div class="flex items-center gap-1.5 px-2.5 py-1.5 bg-accent/80 rounded-lg">
+                                <span class="text-xs font-medium text-foreground">${esc(s.name)}</span>
+                                <span class="text-[10px] text-muted-foreground font-din">${esc(s.code)}</span>
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                            `).join('')}
+                          </div>
+                        </div>
+                      ` : ''}
                     </div>
-                  </div>
-                );
-              })}
+                  `;
+                }).join('')}
+              </div>
             </div>
           </div>
         </div>
-      );
-    };
+      `;
+    }
 
-    // ============ 底部导航 ============
-    const BottomNav = ({ activeTab, onTabChange }) => {
+    function renderConceptsPage() {
+      return `
+        <div class="page ${state.activeTab === 'concepts' ? 'active' : ''}" id="page-concepts">
+          <div class="min-h-screen bg-background safe-bottom">
+            <div class="mx-auto max-w-md px-4 py-4 flex flex-col gap-4">
+              <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-2">
+                  ${icon('lightbulb', 'w-5 h-5 text-fall')}
+                  <h1 class="text-xl font-bold text-foreground">热门概念</h1>
+                </div>
+                <span class="text-xs text-muted-foreground">最热 10 个板块</span>
+              </div>
+              <div class="space-y-3">
+                ${hotConcepts.map(c => {
+                  const rise = c.change >= 0;
+                  return `
+                    <div class="bg-card rounded-xl p-4 shadow-soft">
+                      <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-3">
+                          <span class="w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center ${c.rank <= 3 ? 'bg-hot/15 text-hot' : 'bg-accent text-muted-foreground'}">${c.rank}</span>
+                          <div>
+                            <div class="flex items-center gap-2">
+                              <span class="text-sm font-bold text-foreground">${esc(c.name)}</span>
+                              ${c.isHot ? '<span class="text-[9px] px-1.5 py-0.5 bg-hot/15 text-hot rounded font-bold">HOT</span>' : ''}
+                            </div>
+                            <div class="text-[10px] text-muted-foreground mt-0.5">${c.stockCount}只 · 净流入${c.netInflow}亿</div>
+                          </div>
+                        </div>
+                        <span class="text-lg font-bold font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${c.change.toFixed(2)}%</span>
+                      </div>
+                      <div class="pt-3 border-t border-border/60">
+                        <div class="text-[11px] text-muted-foreground mb-2">龙头股</div>
+                        <div class="flex gap-2">
+                          ${c.leaders.map(s => {
+                            const sr = s.change >= 0;
+                            return `
+                              <div class="flex-1 bg-accent/60 rounded-lg p-2">
+                                <div class="text-xs font-medium text-foreground truncate">${esc(s.name)}</div>
+                                <div class="flex items-center justify-between mt-1">
+                                  <span class="text-[10px] text-muted-foreground font-din">${esc(s.code)}</span>
+                                  <span class="text-[11px] font-bold font-din ${sr ? 'text-rise' : 'text-fall'}">${sr ? '+' : ''}${s.change.toFixed(2)}%</span>
+                                </div>
+                              </div>
+                            `;
+                          }).join('')}
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderBottomNav() {
       const tabs = [
         { key: 'overview', label: '概览', icon: 'home' },
         { key: 'us', label: '美股', icon: 'trending-up' },
@@ -991,171 +631,106 @@
         { key: 'news', label: '新闻', icon: 'newspaper' },
         { key: 'concepts', label: '概念', icon: 'lightbulb' },
       ];
-
-      return (
-        <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <div className="mx-auto max-w-md flex items-stretch h-14">
-            {tabs.map(tab => (
-              <button
-                key={tab.key}
-                onClick={() => onTabChange(tab.key)}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors ${
-                  activeTab === tab.key ? 'text-primary' : 'text-muted-foreground'
-                }`}
-              >
-                <Icon name={tab.icon} className="w-5 h-5" />
-                <span className="text-[10px] font-medium">{tab.label}</span>
+      return `
+        <nav class="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50" style="padding-bottom: env(safe-area-inset-bottom)">
+          <div class="mx-auto max-w-md flex items-stretch h-14">
+            ${tabs.map(t => `
+              <button onclick="switchTab('${t.key}')" class="nav-btn flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors ${state.activeTab === t.key ? 'active' : ''}">
+                ${icon(t.icon, 'w-5 h-5')}
+                <span class="text-[10px] font-medium">${t.label}</span>
               </button>
-            ))}
+            `).join('')}
           </div>
         </nav>
-      );
-    };
+      `;
+    }
 
-    // ============ 主应用 ============
-    const App = () => {
-      const [activeTab, setActiveTab] = useState('overview');
-      const [loading, setLoading] = useState(false);
-      const [aShareData, setAShareData] = useState(null);
-      const [usData, setUsData] = useState(null);
-      const [metalsData, setMetalsData] = useState(null);
+    function render() {
+      const app = document.getElementById('app');
+      app.innerHTML = `
+        ${renderOverview()}
+        ${renderUsPage()}
+        ${renderMetalsPage()}
+        ${renderNewsPage()}
+        ${renderConceptsPage()}
+        ${renderBottomNav()}
+      `;
+    }
 
-      // 获取A股指数数据
-      const fetchAShareData = useCallback(async () => {
-        try {
-          const codes = [MARKET_CODES.aShare.shanghai, MARKET_CODES.aShare.shenzhen, MARKET_CODES.aShare.chinext];
-          const results = await fetchSinaQuotes(codes);
-          
-          const indices = [
-            { name: '上证指数', code: 'sh000001', ...results[MARKET_CODES.aShare.shanghai] },
-            { name: '深证成指', code: 'sz399001', ...results[MARKET_CODES.aShare.shenzhen] },
-            { name: '创业板指', code: 'sz399006', ...results[MARKET_CODES.aShare.chinext] },
-            { name: '科创50', code: 'sh000688', price: 1085.32, changePercent: 2.15 }, // 备用数据
-          ].filter(idx => idx.price);
-
-          // 简单模拟市场统计
-          const risingCount = indices.filter(i => i.changePercent > 0).length;
-          const stats = {
-            upCount: 2856 + Math.floor(Math.random() * 200),
-            downCount: 2341 + Math.floor(Math.random() * 200),
-            limitUpCount: 45 + Math.floor(Math.random() * 15),
-            limitDownCount: 8 + Math.floor(Math.random() * 5),
-            totalTurnover: (1.2 + Math.random() * 0.3).toFixed(2) + '万亿',
-          };
-
-          setAShareData({ indices, stats });
-        } catch (e) {
-          console.error('获取A股数据失败:', e);
-          // 使用备用数据
-          setAShareData({
-            indices: [
-              { name: '上证指数', price: 3256.78, changePercent: 0.85 },
-              { name: '深证成指', price: 10234.56, changePercent: 1.23 },
-              { name: '创业板指', price: 2156.78, changePercent: 1.56 },
-            ],
+    // ============ 数据获取 ============
+    async function refreshAll() {
+      state.loading = true;
+      render();
+      try {
+        const codes = [
+          MARKET_CODES.aShare.shanghai,
+          MARKET_CODES.aShare.shenzhen,
+          MARKET_CODES.aShare.chinext,
+          MARKET_CODES.us.dow,
+          MARKET_CODES.us.nasdaq,
+          MARKET_CODES.us.sp500,
+          MARKET_CODES.metals.gold,
+          MARKET_CODES.metals.silver,
+        ];
+        const results = await fetchSinaQuotes(codes);
+        
+        // A股
+        const aIndices = [
+          { name: '上证指数', ...results[MARKET_CODES.aShare.shanghai] },
+          { name: '深证成指', ...results[MARKET_CODES.aShare.shenzhen] },
+          { name: '创业板指', ...results[MARKET_CODES.aShare.chinext] },
+        ].filter(i => i.price);
+        if (aIndices.length > 0) {
+          state.aShare = {
+            indices: aIndices,
             stats: {
-              upCount: 2856, downCount: 2341, limitUpCount: 45, limitDownCount: 8, totalTurnover: '1.25万亿',
+              upCount: 2800 + Math.floor(Math.random() * 300),
+              downCount: 2200 + Math.floor(Math.random() * 300),
+              limitUpCount: 40 + Math.floor(Math.random() * 20),
+              limitDownCount: 5 + Math.floor(Math.random() * 10),
+              totalTurnover: (1.1 + Math.random() * 0.4).toFixed(2) + '万亿',
             }
-          });
+          };
         }
-      }, []);
+        
+        // 美股
+        const usIndices = [
+          { name: '道琼斯工业', ...results[MARKET_CODES.us.dow] },
+          { name: '纳斯达克综合', ...results[MARKET_CODES.us.nasdaq] },
+          { name: '标普500', ...results[MARKET_CODES.us.sp500] },
+        ].filter(i => i.price);
+        if (usIndices.length > 0) state.us = { indices: usIndices };
+        
+        // 贵金属
+        const mList = [
+          { name: '黄金', ...results[MARKET_CODES.metals.gold] },
+          { name: '白银', ...results[MARKET_CODES.metals.silver] },
+        ].filter(m => m.price);
+        if (mList.length > 0) state.metals = { metals: mList };
+        
+      } catch (e) {
+        console.log('数据获取失败，使用备用数据:', e.message);
+      }
+      state.loading = false;
+      render();
+    }
 
-      // 获取美股数据
-      const fetchUsData = useCallback(async () => {
-        try {
-          const codes = [MARKET_CODES.us.dow, MARKET_CODES.us.nasdaq, MARKET_CODES.us.sp500];
-          const results = await fetchSinaQuotes(codes);
-          
-          const indices = [
-            { name: '道琼斯工业', ...results[MARKET_CODES.us.dow] },
-            { name: '纳斯达克综合', ...results[MARKET_CODES.us.nasdaq] },
-            { name: '标普500', ...results[MARKET_CODES.us.sp500] },
-          ].filter(idx => idx.price);
+    // ============ 交互函数 ============
+    function switchTab(tab) {
+      state.activeTab = tab;
+      render();
+      window.scrollTo(0, 0);
+    }
 
-          setUsData({ indices });
-        } catch (e) {
-          console.error('获取美股数据失败:', e);
-          setUsData({
-            indices: [
-              { name: '道琼斯工业', price: 52759.21, changePercent: -1.32 },
-              { name: '纳斯达克综合', price: 26067.17, changePercent: -1.00 },
-              { name: '标普500', price: 7641.16, changePercent: -0.87 },
-            ]
-          });
-        }
-      }, []);
+    function setHotTab(tab) {
+      state.hotTab = tab;
+      render();
+    }
 
-      // 获取贵金属数据
-      const fetchMetalsData = useCallback(async () => {
-        try {
-          const codes = [MARKET_CODES.metals.gold, MARKET_CODES.metals.silver];
-          const results = await fetchSinaQuotes(codes);
-          
-          const metals = [
-            { name: '黄金', ...results[MARKET_CODES.metals.gold] },
-            { name: '白银', ...results[MARKET_CODES.metals.silver] },
-          ].filter(m => m.price);
-
-          setMetalsData({ metals });
-        } catch (e) {
-          console.error('获取贵金属数据失败:', e);
-          setMetalsData({
-            metals: [
-              { name: '黄金', price: 4490.87, changePercent: -0.68 },
-              { name: '白银', price: 63.50, changePercent: -3.27 },
-            ]
-          });
-        }
-      }, []);
-
-      // 刷新所有数据
-      const refreshAll = useCallback(async () => {
-        setLoading(true);
-        try {
-          await Promise.all([
-            fetchAShareData(),
-            fetchUsData(),
-            fetchMetalsData(),
-          ]);
-        } finally {
-          setLoading(false);
-        }
-      }, [fetchAShareData, fetchUsData, fetchMetalsData]);
-
-      // 初始加载
-      useEffect(() => {
-        refreshAll();
-        // 每60秒自动刷新
-        const interval = setInterval(refreshAll, 60000);
-        return () => clearInterval(interval);
-      }, [refreshAll]);
-
-      const renderPage = () => {
-        switch (activeTab) {
-          case 'overview':
-            return <OverviewPage data={aShareData} loading={loading} onRefresh={refreshAll} />;
-          case 'us':
-            return <UsStocksPage data={usData} loading={loading} onRefresh={refreshAll} />;
-          case 'metals':
-            return <MetalsPage data={metalsData} loading={loading} onRefresh={refreshAll} />;
-          case 'news':
-            return <NewsPage />;
-          case 'concepts':
-            return <ConceptsPage />;
-          default:
-            return <OverviewPage data={aShareData} loading={loading} onRefresh={refreshAll} />;
-        }
-      };
-
-      return (
-        <div className="min-h-screen bg-background">
-          {renderPage()}
-          <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
-        </div>
-      );
-    };
-
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    // ============ 初始化 ============
+    render();
+    refreshAll();
+    setInterval(refreshAll, 60000);
   </script>
 </body>
 </html>
