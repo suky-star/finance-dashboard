@@ -68,58 +68,67 @@
       return icons[name] || '';
     };
 
-    // ============ 行情数据 ============
-    const SINA_API = 'https://hq.sinajs.cn/list=';
+    // ============ 行情数据（腾讯财经）============
+    const TENCENT_API = 'https://qt.gtimg.cn/q=';
     const MARKET_CODES = {
       aShare: { shanghai: 'sh000001', shenzhen: 'sz399001', chinext: 'sz399006', kc50: 'sh000688' },
-      us: { dow: 'gb_$dji', nasdaq: 'gb_ixic', sp500: 'gb_inx' },
+      us: { dow: 'usDJI', nasdaq: 'usIXIC', sp500: 'usINX' },
       metals: { gold: 'hf_GC', silver: 'hf_SI' },
     };
 
-    function parseSinaData(code, rawStr) {
-      const parts = rawStr.split(',');
-      if (code.startsWith('sh') || code.startsWith('sz')) {
-        const price = parseFloat(parts[3]);
-        const preClose = parseFloat(parts[2]);
+    function parseTencentData(code, rawStr) {
+      // 贵金属格式（逗号分隔）
+      if (code.startsWith('hf_')) {
+        const parts = rawStr.split(',');
+        const price = parseFloat(parts[0]);
+        const preClose = parseFloat(parts[7]);
+        const changePercent = parseFloat(parts[1]);
+        const name = parts[parts.length - 1] || (code === 'hf_GC' ? '黄金' : '白银');
         return {
-          name: parts[0],
+          name: name,
           price: price,
           change: price - preClose,
-          changePercent: ((price - preClose) / preClose * 100),
+          changePercent: changePercent,
         };
       }
-      if (code.startsWith('gb_')) {
-        return {
-          name: parts[0],
-          price: parseFloat(parts[1]),
-          change: parseFloat(parts[2]),
-          changePercent: parseFloat(parts[3]),
-        };
-      }
-      if (code.startsWith('hf_')) {
-        return {
-          name: parts[0],
-          price: parseFloat(parts[1]),
-          change: parseFloat(parts[2]),
-          changePercent: parseFloat(parts[3]),
-        };
-      }
-      return { name: parts[0], price: parseFloat(parts[1] || 0) };
+      
+      // 股票/指数格式（波浪线分隔）
+      const parts = rawStr.split('~');
+      if (parts.length < 5) return null;
+      
+      const name = parts[1] || code;
+      const price = parseFloat(parts[3]);
+      const preClose = parseFloat(parts[4]);
+      
+      if (isNaN(price) || isNaN(preClose)) return null;
+      
+      const change = price - preClose;
+      const changePercent = (change / preClose) * 100;
+      
+      return {
+        name: name,
+        price: price,
+        change: change,
+        changePercent: changePercent,
+      };
     }
 
-    function fetchSinaQuotes(codes) {
+    function fetchTencentQuotes(codes) {
       return new Promise((resolve, reject) => {
         const codeStr = codes.join(',');
         const script = document.createElement('script');
         const timeout = setTimeout(() => { reject(new Error('超时')); script.remove(); }, 10000);
-        script.src = SINA_API + codeStr + '?t=' + Date.now();
+        script.src = TENCENT_API + codeStr + '?t=' + Date.now();
         script.onload = () => {
           clearTimeout(timeout);
           const results = {};
           codes.forEach(code => {
-            const varName = 'hq_str_' + code.replace(/\$/g, '_').replace(/\./g, '_');
+            const varName = 'v_' + code.replace(/\$/g, '_').replace(/\./g, '_');
             const rawValue = window[varName];
-            if (rawValue) results[code] = parseSinaData(code, rawValue);
+            if (rawValue) {
+              const parsed = parseTencentData(code, rawValue);
+              if (parsed) results[code] = parsed;
+            }
           });
           script.remove();
           resolve(results);
@@ -340,7 +349,7 @@
 
               <div class="flex items-center justify-center gap-1.5">
                 ${icon('clock', 'w-3 h-3 text-muted-foreground')}
-                <span class="text-[11px] text-muted-foreground">${state.loading ? '数据更新中...' : '数据来源：新浪财经 · 实时行情'}</span>
+                <span class="text-[11px] text-muted-foreground">${state.loading ? '数据更新中...' : '数据来源：腾讯财经 · 实时行情'}</span>
               </div>
             </div>
           </div>
@@ -662,7 +671,8 @@
       state.loading = true;
       render();
       try {
-        const codes = [
+        // 一次请求获取所有行情数据，减少请求次数
+        const allCodes = [
           MARKET_CODES.aShare.shanghai,
           MARKET_CODES.aShare.shenzhen,
           MARKET_CODES.aShare.chinext,
@@ -672,7 +682,7 @@
           MARKET_CODES.metals.gold,
           MARKET_CODES.metals.silver,
         ];
-        const results = await fetchSinaQuotes(codes);
+        const results = await fetchTencentQuotes(allCodes);
         
         // A股
         const aIndices = [
@@ -730,7 +740,7 @@
     // ============ 初始化 ============
     render();
     refreshAll();
-    setInterval(refreshAll, 60000);
+    setInterval(refreshAll, 120000);
   </script>
 </body>
 </html>
