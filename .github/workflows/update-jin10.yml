@@ -1,0 +1,34 @@
+name: 每日金十数据更新
+
+on:
+  schedule:
+    - cron: '0 23 * * *'
+    - cron: '0 4 * * *'
+    - cron: '0 8 * * *'
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 抓取金十数据
+        run: |
+          node .github/scripts/fetch-jin10.js
+
+      - name: 提交并推送更新
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git diff --quiet && git diff --staged --quiet || (git commit -m "更新金十数据 - $(date '+%Y/%m/%d %H:%M')" && git push)
