@@ -1,0 +1,35 @@
+name: 每日金十数据更新
+
+on:
+  schedule:
+    # 每天北京时间早上7点、中午12点、下午4点、晚上8点各更新一次
+    - cron: '0 23 * * *'   # 北京时间 7:00
+    - cron: '0 4 * * *'    # 北京时间 12:00
+    - cron: '0 8 * * *'    # 北京时间 16:00
+    - cron: '0 12 * * *'   # 北京时间 20:00
+  workflow_dispatch:        # 支持手动触发
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 抓取金十数据
+        env:
+          JIN10_TOKEN: ${{ secrets.JIN10_TOKEN }}
+        run: |
+          node .github/scripts/fetch-jin10.js
+
+      - name: 提交并推送更新
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git diff --quiet && git diff --staged --quiet || (git commit -m "更新金十数据 - $(date '+%Y/%m/%d %H:%M')" && git push)

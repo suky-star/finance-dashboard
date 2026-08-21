@@ -146,7 +146,37 @@
       us: null,
       metals: null,
       hotTab: 'hot',
+      newsTab: 'news',
+      dynamicData: null,
+      newsData: null,
+      newsLoading: true,
     };
+
+    // 加载金十动态数据
+    async function loadNewsData() {
+      try {
+        const res = await fetch('data/news.json?t=' + Date.now());
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.source === '金十数据') {
+            state.dynamicData = data;
+            state.newsData = data;
+            state.newsLoading = false;
+            return true;
+          }
+          // 兼容旧格式
+          if (data && data.news && data.news.length > 0) {
+            state.newsData = data;
+            state.newsLoading = false;
+            return true;
+          }
+        }
+      } catch (e) {
+        console.log('动态数据加载失败，使用备用数据:', e.message);
+      }
+      state.newsLoading = false;
+      return false;
+    }
 
     // 备用数据
     const fallbackData = {
@@ -254,8 +284,11 @@
     function renderOverview() {
       const data = state.aShare || fallbackData.aShare;
       const stats = data.stats;
-      const sectors = hotData.hotSectors;
-      const forecast = hotData.strongForecast;
+      
+      // 使用金十动态分析数据
+      const overview = state.dynamicData?.analysis?.overview;
+      const concepts = state.dynamicData?.analysis?.concepts || [];
+      const strongSectors = overview?.strongSectors || [];
 
       const hotTabActive = state.hotTab === 'hot';
       const forecastTabActive = state.hotTab === 'forecast';
@@ -291,65 +324,65 @@
                 </div>
               </div>
 
+              ${overview ? `
               <div class="bg-card rounded-xl p-5 shadow-soft overflow-hidden">
-                <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center justify-between mb-3">
                   <div class="flex items-center gap-2">
                     <div class="w-7 h-7 rounded-lg bg-hot/15 flex items-center justify-center text-hot">${icon('flame', 'w-4 h-4')}</div>
                     <h3 class="text-sm font-bold text-foreground">今日热点分析</h3>
                   </div>
-                  <span class="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">AI 综合研判</span>
+                  <span class="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">${overview.sentiment || '综合研判'}</span>
                 </div>
+                <p class="text-xs text-foreground leading-relaxed mb-4">${overview.summary}</p>
+                
                 <div class="flex bg-accent rounded-lg p-0.5 mb-4">
-                  <button onclick="setHotTab('hot')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${hotTabActive ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'}">热门板块</button>
+                  <button onclick="setHotTab('hot')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${hotTabActive ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'}">热门概念</button>
                   <button onclick="setHotTab('forecast')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${forecastTabActive ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'}">走强预测</button>
                 </div>
+                
                 ${hotTabActive ? `
                   <div class="space-y-3">
-                    ${sectors.map((s, i) => `
+                    ${concepts.slice(0, 6).map((s, i) => `
                       <div class="space-y-1.5">
                         <div class="flex items-center justify-between">
                           <div class="flex items-center gap-2">
                             <span class="w-5 h-5 rounded text-xs font-bold flex items-center justify-center ${i < 3 ? 'bg-hot/15 text-hot' : 'bg-accent text-muted-foreground'}">${i+1}</span>
                             <span class="text-sm font-semibold text-foreground">${esc(s.name)}</span>
-                            ${s.trend === 'up' ? '<span class="text-rise text-xs font-bold">↑</span>' : ''}
+                            ${s.trend === 'up' ? '<span class="text-rise text-xs font-bold">↑</span>' : s.trend === 'down' ? '<span class="text-fall text-xs font-bold">↓</span>' : ''}
                           </div>
                           <div class="flex items-center gap-1.5">
-                            <div class="w-16 h-1.5 bg-accent rounded-full overflow-hidden"><div class="h-full bg-gradient-to-r from-hot to-rise rounded-full" style="width:${s.score}%"></div></div>
+                            <div class="w-16 h-1.5 bg-accent rounded-full overflow-hidden"><div class="h-full bg-gradient-to-r from-hot to-rise rounded-full" style="width:${Math.min(100, s.score * 8)}%"></div></div>
                             <span class="text-xs font-bold text-hot w-7 text-right">${s.score}</span>
                           </div>
                         </div>
-                        <p class="text-[11px] text-muted-foreground pl-7 leading-relaxed">${esc(s.reason)}</p>
+                        ${s.relatedNews && s.relatedNews[0] ? `<p class="text-[11px] text-muted-foreground pl-7 leading-relaxed">${esc(s.relatedNews[0])}</p>` : ''}
                       </div>
                     `).join('')}
                   </div>
                 ` : `
                   <div class="space-y-3">
-                    ${forecast.map(item => `
+                    ${strongSectors.map((item, i) => `
                       <div class="bg-accent/50 rounded-xl p-3">
                         <div class="flex items-center justify-between mb-2">
                           <div class="flex items-center gap-2">
-                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-rise to-hot flex items-center justify-center text-white text-xs font-bold">${item.rank}</div>
+                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-rise to-hot flex items-center justify-center text-white text-xs font-bold">${i+1}</div>
                             <span class="text-sm font-bold text-foreground">${esc(item.name)}</span>
                           </div>
-                          <span class="text-xs px-2 py-0.5 bg-rise/10 text-rise rounded-full font-bold">${item.probability}概率</span>
+                          <span class="text-xs px-2 py-0.5 bg-rise/10 text-rise rounded-full font-bold">高关注</span>
                         </div>
-                        <div class="space-y-1 mb-2">
-                          ${item.catalysts.map(c => `
-                            <div class="flex items-start gap-1.5"><span class="text-hot text-xs mt-0.5">•</span><span class="text-[11px] text-muted-foreground">${esc(c)}</span></div>
-                          `).join('')}
-                        </div>
-                        <div class="flex flex-wrap gap-1.5 pt-2 border-t border-border/50">
-                          ${item.keyStocks.map(ks => `<span class="text-[11px] px-2 py-0.5 bg-primary/10 text-primary rounded-md font-medium">${esc(ks)}</span>`).join('')}
+                        <div class="space-y-1">
+                          <div class="flex items-start gap-1.5"><span class="text-hot text-xs mt-0.5">•</span><span class="text-[11px] text-muted-foreground">${esc(item.reason)}</span></div>
                         </div>
                       </div>
                     `).join('')}
                   </div>
                 `}
               </div>
+              ` : ''}
 
               <div class="flex items-center justify-center gap-1.5">
                 ${icon('clock', 'w-3 h-3 text-muted-foreground')}
-                <span class="text-[11px] text-muted-foreground">${state.loading ? '数据更新中...' : '数据来源：腾讯财经 · 实时行情'}</span>
+                <span class="text-[11px] text-muted-foreground">${state.loading ? '数据更新中...' : '数据来源：金十数据 · ' + (state.dynamicData?.updateTime || '实时更新')}</span>
               </div>
             </div>
           </div>
@@ -358,66 +391,69 @@
     }
 
     function renderUsPage() {
-      const data = state.us || fallbackData.us;
+      const analysis = state.dynamicData?.analysis?.us;
+      const quotes = state.dynamicData?.quotes || {};
+      const items = analysis?.items || [quotes.XAUUSD, quotes.XAGUSD, quotes.USOIL, quotes.COPPER].filter(Boolean);
+      
       return `
         <div class="page ${state.activeTab === 'us' ? 'active' : ''}" id="page-us">
           <div class="min-h-screen bg-background safe-bottom">
             <div class="mx-auto max-w-md px-4 py-4 flex flex-col gap-5">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  ${icon('trending-up', 'w-5 h-5 text-primary')}
-                  <h1 class="text-xl font-bold text-foreground">美股</h1>
+                  ${icon('globe', 'w-5 h-5 text-primary')}
+                  <h1 class="text-xl font-bold text-foreground">国际市场</h1>
                 </div>
                 <button onclick="refreshAll()" class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center active:scale-95 transition-transform">
                   <span class="${state.loading ? 'animate-spin' : ''} text-primary">${icon('refresh-cw')}</span>
                 </button>
               </div>
 
+              ${analysis ? `
               <div class="bg-card rounded-xl p-5 shadow-soft">
                 <div class="flex items-center justify-between mb-3">
                   <div class="flex items-center gap-2">
                     <div class="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center text-primary">${icon('bar-chart-3', 'w-4 h-4')}</div>
-                    <h3 class="text-sm font-bold text-foreground">昨夜行情综述</h3>
+                    <h3 class="text-sm font-bold text-foreground">行情综合分析</h3>
                   </div>
-                  <span class="text-[10px] px-2 py-0.5 bg-fall/10 text-fall rounded-full font-medium">全线收跌</span>
+                  <span class="text-[10px] px-2 py-0.5 bg-${analysis.statusColor}/10 text-${analysis.statusColor} rounded-full font-medium">${analysis.statusLabel}</span>
                 </div>
                 <div class="space-y-3">
-                  <p class="text-xs text-foreground leading-relaxed">周四（8月20日）美股三大指数全线收跌。道指跌超700点，跌幅1.32%，报52759.21点；纳指跌1.00%，报26067.17点；标普500跌0.87%，报7641.16点。</p>
+                  <p class="text-xs text-foreground leading-relaxed">${analysis.summary}</p>
                   <div class="bg-accent/60 rounded-lg p-3 space-y-1.5">
-                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">美联储官员释放偏鹰信号，市场降息预期降温</span></div>
-                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">美债收益率反弹，10年期收益率上行</span></div>
-                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">沃尔玛重挫超9%，零售财报不及预期</span></div>
-                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">美伊紧张局势加剧，油价大涨推升通胀担忧</span></div>
+                    ${analysis.factors.map(f => `
+                      <div class="flex items-start gap-2"><span class="text-${analysis.statusColor} text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">${esc(f)}</span></div>
+                    `).join('')}
                   </div>
                   <div class="pt-2 border-t border-border/60">
-                    <div class="flex items-center gap-1.5 mb-2">${icon('zap', 'w-3.5 h-3.5 text-hot')}<span class="text-[11px] text-muted-foreground font-medium">亮点板块</span></div>
+                    <div class="flex items-center gap-1.5 mb-2">${icon('zap', 'w-3.5 h-3.5 text-hot')}<span class="text-[11px] text-muted-foreground font-medium">波动品种</span></div>
                     <div class="flex flex-wrap gap-1.5">
-                      <span class="text-[11px] px-2 py-1 bg-rise/10 text-rise rounded-md font-medium">存储芯片</span>
-                      <span class="text-[11px] px-2 py-1 bg-rise/10 text-rise rounded-md font-medium">光通信</span>
-                      <span class="text-[11px] px-2 py-1 bg-fall/10 text-fall rounded-md font-medium">零售</span>
-                      <span class="text-[11px] px-2 py-1 bg-fall/10 text-fall rounded-md font-medium">银行</span>
+                      ${analysis.highlights.map(h => `
+                        <span class="text-[11px] px-2 py-1 bg-${h.positive ? 'rise' : 'fall'}/10 text-${h.positive ? 'rise' : 'fall'} rounded-md font-medium">${h.name}</span>
+                      `).join('')}
                     </div>
                   </div>
                 </div>
               </div>
+              ` : ''}
 
               <div class="grid grid-cols-2 gap-3">
-                ${data.indices.map(renderIndexCard).join('')}
+                ${items.map(item => renderQuoteCard(item)).join('')}
               </div>
 
               <div class="bg-card rounded-xl p-5 shadow-soft">
-                <h3 class="text-sm font-semibold text-foreground mb-4">板块表现</h3>
+                <h3 class="text-sm font-semibold text-foreground mb-4">涨跌幅排行</h3>
                 <div class="space-y-3">
-                  ${usSectors.map(s => {
-                    const rise = s.change >= 0;
+                  ${[...items].sort((a, b) => b.changePercent - a.changePercent).map(item => {
+                    const rise = item.changePercent >= 0;
                     return `
                       <div>
                         <div class="flex items-center justify-between mb-1">
-                          <span class="text-sm text-foreground">${esc(s.name)}</span>
-                          <span class="text-sm font-semibold font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${s.change.toFixed(2)}%</span>
+                          <span class="text-sm text-foreground">${esc(item.name)}</span>
+                          <span class="text-sm font-semibold font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${item.changePercent.toFixed(2)}%</span>
                         </div>
                         <div class="h-1.5 bg-accent rounded-full overflow-hidden">
-                          <div class="h-full rounded-full ${rise ? 'bg-rise' : 'bg-fall'}" style="width:${Math.min(100, Math.abs(s.change) * 40)}%"></div>
+                          <div class="h-full rounded-full ${rise ? 'bg-rise' : 'bg-fall'}" style="width:${Math.min(100, Math.abs(item.changePercent) * 20)}%"></div>
                         </div>
                       </div>
                     `;
@@ -430,8 +466,30 @@
       `;
     }
 
+    function renderQuoteCard(item) {
+      const rise = item.changePercent >= 0;
+      return `
+        <div class="bg-card rounded-xl p-4 shadow-soft relative overflow-hidden">
+          <div class="absolute bottom-0 left-0 right-0 h-1 ${rise ? 'bg-rise' : 'bg-fall'}"></div>
+          <div class="text-[11px] text-muted-foreground mb-1">${esc(item.name)}</div>
+          <div class="text-xl font-bold font-din text-foreground mb-1">${item.price.toFixed(2)}</div>
+          <div class="flex items-center gap-1">
+            <span class="text-sm font-semibold font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${item.changePercent.toFixed(2)}%</span>
+            <span class="text-[11px] ${rise ? 'text-rise/70' : 'text-fall/70'}">${rise ? '▲' : '▼'}${Math.abs(item.change).toFixed(2)}</span>
+          </div>
+        </div>
+      `;
+    }
+
     function renderMetalsPage() {
-      const data = state.metals || fallbackData.metals;
+      const analysis = state.dynamicData?.analysis?.metals;
+      const quotes = state.dynamicData?.quotes || {};
+      const xau = analysis?.xau || quotes.XAUUSD;
+      const xag = analysis?.xag || quotes.XAGUSD;
+      const copper = quotes.COPPER;
+      
+      const metals = [xau, xag].filter(Boolean);
+      
       return `
         <div class="page ${state.activeTab === 'metals' ? 'active' : ''}" id="page-metals">
           <div class="min-h-screen bg-background safe-bottom">
@@ -439,42 +497,48 @@
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
                   ${icon('gem', 'w-5 h-5 text-precious')}
-                  <h1 class="text-xl font-bold text-foreground">有色金属</h1>
+                  <h1 class="text-xl font-bold text-foreground">贵金属</h1>
                 </div>
                 <button onclick="refreshAll()" class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center active:scale-95 transition-transform">
                   <span class="${state.loading ? 'animate-spin' : ''} text-primary">${icon('refresh-cw')}</span>
                 </button>
               </div>
 
+              ${analysis ? `
               <div class="bg-card rounded-xl p-5 shadow-soft">
                 <div class="flex items-center justify-between mb-3">
                   <div class="flex items-center gap-2">
                     <div class="w-7 h-7 rounded-lg bg-precious/15 flex items-center justify-center text-precious">${icon('gem', 'w-4 h-4')}</div>
-                    <h3 class="text-sm font-bold text-foreground">昨夜行情综述</h3>
+                    <h3 class="text-sm font-bold text-foreground">行情综合分析</h3>
                   </div>
-                  <span class="text-[10px] px-2 py-0.5 bg-rise/10 text-rise rounded-full font-medium">高位震荡</span>
+                  <span class="text-[10px] px-2 py-0.5 bg-${analysis.statusColor}/10 text-${analysis.statusColor} rounded-full font-medium">${analysis.statusLabel}</span>
                 </div>
                 <div class="space-y-3">
-                  <p class="text-xs text-foreground leading-relaxed">周四（8月20日）国际金价在4500美元关口高位震荡。现货黄金报4490.87美元/盎司，微跌0.68%，此前一日曾大涨4.35%突破4500美元整数关口。白银波动加剧，前一日大涨5.81%后进入整理。</p>
+                  <p class="text-xs text-foreground leading-relaxed">${analysis.summary}</p>
                   <div class="bg-accent/60 rounded-lg p-3 space-y-1.5">
-                    <div class="flex items-start gap-2"><span class="text-rise text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">地缘政治风险持续，避险需求支撑金价中长期走势</span></div>
-                    <div class="flex items-start gap-2"><span class="text-rise text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">美联储降息预期仍是贵金属中期核心驱动力</span></div>
-                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">短期获利了结压力显现，高位波动加大</span></div>
-                    <div class="flex items-start gap-2"><span class="text-fall text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">工业金属承压，纽约铜跌约1%，经济复苏预期偏弱</span></div>
+                    ${analysis.factors.map(f => `
+                      <div class="flex items-start gap-2"><span class="text-${analysis.statusColor} text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">${esc(f)}</span></div>
+                    `).join('')}
                   </div>
+                  ${analysis.techViews && analysis.techViews.length > 0 ? `
                   <div class="pt-2 border-t border-border/60">
-                    <div class="flex items-center gap-1.5 mb-2">${icon('trending-up', 'w-3.5 h-3.5 text-rise')}<span class="text-[11px] text-muted-foreground font-medium">关注要点</span></div>
-                    <div class="flex flex-wrap gap-1.5">
-                      <span class="text-[11px] px-2 py-1 bg-precious/10 text-precious rounded-md font-medium">金价4500关口</span>
-                      <span class="text-[11px] px-2 py-1 bg-rise/10 text-rise rounded-md font-medium">降息预期</span>
-                      <span class="text-[11px] px-2 py-1 bg-fall/10 text-fall rounded-md font-medium">铜价承压</span>
+                    <div class="flex items-center gap-1.5 mb-2">${icon('activity', 'w-3.5 h-3.5 text-primary')}<span class="text-[11px] text-muted-foreground font-medium">技术面解读</span></div>
+                    <div class="space-y-1.5">
+                      ${analysis.techViews.map(v => `
+                        <div class="flex items-start gap-2">
+                          <span class="text-${v.positive === true ? 'rise' : v.positive === false ? 'fall' : 'muted-foreground'} text-xs mt-0.5 font-bold">•</span>
+                          <span class="text-[11px] text-foreground">${esc(v.text)}</span>
+                        </div>
+                      `).join('')}
                     </div>
                   </div>
+                  ` : ''}
                 </div>
               </div>
+              ` : ''}
 
               <div class="grid grid-cols-2 gap-3">
-                ${data.metals.map(m => {
+                ${metals.map(m => {
                   const rise = m.changePercent >= 0;
                   return `
                     <div class="relative rounded-xl p-4 overflow-hidden" style="background: linear-gradient(135deg, hsl(43 96% 62%), hsl(43 96% 50%))">
@@ -487,20 +551,22 @@
                 }).join('')}
               </div>
 
+              ${copper ? `
               <div class="bg-card rounded-xl p-5 shadow-soft">
-                <h3 class="text-sm font-semibold text-foreground mb-4">LME 期货</h3>
+                <h3 class="text-sm font-semibold text-foreground mb-4">工业金属</h3>
                 <div class="space-y-3">
-                  ${lmeMetals.map(m => {
+                  ${[copper].map(m => {
                     const rise = m.changePercent >= 0;
                     return `
                       <div class="flex items-center justify-between">
-                        <div><span class="text-sm text-foreground font-medium">${esc(m.name)}</span><span class="text-xs text-muted-foreground ml-2">$${m.price}</span></div>
+                        <div><span class="text-sm text-foreground font-medium">${esc(m.name)}</span><span class="text-xs text-muted-foreground ml-2">$${m.price.toFixed(4)}</span></div>
                         <span class="text-sm font-semibold font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${m.changePercent.toFixed(2)}%</span>
                       </div>
                     `;
                   }).join('')}
                 </div>
               </div>
+              ` : ''}
             </div>
           </div>
         </div>
@@ -508,7 +574,12 @@
     }
 
     function renderNewsPage() {
-      const allNews = [...hotData.aShareNews, ...hotData.globalNews].sort((a, b) => b.time.localeCompare(a.time));
+      const newsData = state.dynamicData;
+      const newsList = newsData?.news || [];
+      const flashList = newsData?.flash || [];
+      
+      const newsTabActive = state.newsTab === 'news';
+      
       return `
         <div class="page ${state.activeTab === 'news' ? 'active' : ''}" id="page-news">
           <div class="min-h-screen bg-background safe-bottom">
@@ -516,59 +587,52 @@
               <div class="flex items-center justify-between mb-1">
                 <div class="flex items-center gap-2">
                   ${icon('newspaper', 'w-5 h-5 text-hot')}
-                  <h1 class="text-xl font-bold text-foreground">财经新闻</h1>
+                  <h1 class="text-xl font-bold text-foreground">财经资讯</h1>
                 </div>
-                <span class="text-xs text-muted-foreground">A股 + 全球</span>
+                <span class="text-xs text-muted-foreground">金十数据</span>
               </div>
-              <div class="space-y-3">
-                ${allNews.map(item => {
-                  const isAShare = item.region === 'a-share';
-                  const impactColor = item.impact === 'positive' ? 'text-rise' : item.impact === 'negative' ? 'text-fall' : 'text-muted-foreground';
-                  const impactIconName = item.impact === 'positive' ? 'trending-up' : item.impact === 'negative' ? 'trending-down' : 'minus';
-                  const impactBg = item.impact === 'positive' ? 'bg-rise/10' : item.impact === 'negative' ? 'bg-fall/10' : 'bg-accent';
-                  return `
+              
+              <div class="flex bg-accent rounded-lg p-0.5">
+                <button onclick="setNewsTab('news')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${newsTabActive ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'}">深度资讯</button>
+                <button onclick="setNewsTab('flash')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${!newsTabActive ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'}">实时快讯</button>
+              </div>
+              
+              ${newsTabActive ? `
+                <div class="space-y-3">
+                  ${newsList.length > 0 ? newsList.map(item => `
                     <div class="bg-card rounded-xl p-4 shadow-soft">
-                      <div class="flex items-start gap-3 mb-2">
-                        <div class="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${impactBg} ${impactColor}">${icon(impactIconName, 'w-4 h-4')}</div>
-                        <div class="flex-1 min-w-0">
-                          <div class="flex items-center gap-2 mb-1">
-                            <span class="text-[10px] px-1.5 py-0.5 rounded font-medium ${isAShare ? 'bg-primary/10 text-primary' : 'bg-accent text-muted-foreground'}">${isAShare ? 'A股' : '全球'}</span>
-                            ${item.impact === 'positive' ? '<span class="text-[10px] px-1.5 py-0.5 bg-rise/10 text-rise rounded font-medium">利好</span>' : ''}
-                            ${item.impact === 'negative' ? '<span class="text-[10px] px-1.5 py-0.5 bg-fall/10 text-fall rounded font-medium">利空</span>' : ''}
-                          </div>
-                          <h3 class="text-sm font-semibold text-foreground leading-snug">${esc(item.title)}</h3>
-                        </div>
+                      <h3 class="text-sm font-semibold text-foreground leading-snug mb-2">${esc(item.title)}</h3>
+                      ${item.intro ? `<p class="text-[11px] text-muted-foreground leading-relaxed mb-3 line-clamp-2">${esc(item.intro)}</p>` : ''}
+                      <div class="flex items-center gap-2">
+                        <span class="text-xs text-muted-foreground">${esc(item.time || '')}</span>
+                        ${item.url ? `<a href="${esc(item.url)}" target="_blank" class="text-xs text-primary ml-auto">查看原文 →</a>` : ''}
                       </div>
-                      <div class="flex items-center gap-2 mb-3 ml-10">
-                        <span class="text-xs text-muted-foreground">${esc(item.source)}</span>
-                        <span class="w-1 h-1 rounded-full bg-border"></span>
-                        <span class="text-xs text-muted-foreground">${esc(item.time)}</span>
-                      </div>
-                      ${item.insight ? `
-                        <div class="ml-10 mb-3 px-3 py-2 bg-accent/60 rounded-lg border-l-2 border-primary">
-                          <div class="flex items-start gap-1.5">
-                            ${icon('lightbulb', 'w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5')}
-                            <p class="text-[11px] text-foreground leading-relaxed">${esc(item.insight)}</p>
-                          </div>
-                        </div>
-                      ` : ''}
-                      ${item.relatedStocks && item.relatedStocks.length > 0 ? `
-                        <div class="ml-10 pt-3 border-t border-border/60">
-                          <div class="flex items-center gap-1.5 mb-2">${icon('link-2', 'w-3 h-3 text-muted-foreground')}<span class="text-[11px] text-muted-foreground font-medium">相关个股</span></div>
-                          <div class="flex flex-wrap gap-2">
-                            ${item.relatedStocks.map(s => `
-                              <div class="flex items-center gap-1.5 px-2.5 py-1.5 bg-accent/80 rounded-lg">
-                                <span class="text-xs font-medium text-foreground">${esc(s.name)}</span>
-                                <span class="text-[10px] text-muted-foreground font-din">${esc(s.code)}</span>
-                              </div>
-                            `).join('')}
-                          </div>
-                        </div>
-                      ` : ''}
                     </div>
-                  `;
-                }).join('')}
-              </div>
+                  `).join('') : `
+                    <div class="bg-card rounded-xl p-8 text-center">
+                      <div class="text-muted-foreground text-sm">暂无资讯数据</div>
+                    </div>
+                  `}
+                </div>
+              ` : `
+                <div class="space-y-2">
+                  ${flashList.length > 0 ? flashList.map(item => `
+                    <div class="bg-card rounded-xl p-4 shadow-soft">
+                      <div class="flex items-start gap-3">
+                        <div class="flex-shrink-0 w-2 h-2 mt-1.5 rounded-full ${item.important ? 'bg-rise' : 'bg-border'}"></div>
+                        <div class="flex-1 min-w-0">
+                          <p class="text-sm text-foreground leading-relaxed">${esc(item.title || item.content || '')}</p>
+                          <div class="text-[11px] text-muted-foreground mt-2">${esc(item.time || '')}</div>
+                        </div>
+                      </div>
+                    </div>
+                  `).join('') : `
+                    <div class="bg-card rounded-xl p-8 text-center">
+                      <div class="text-muted-foreground text-sm">暂无快讯数据</div>
+                    </div>
+                  `}
+                </div>
+              `}
             </div>
           </div>
         </div>
@@ -576,20 +640,22 @@
     }
 
     function renderConceptsPage() {
+      const concepts = state.dynamicData?.analysis?.concepts || [];
       return `
         <div class="page ${state.activeTab === 'concepts' ? 'active' : ''}" id="page-concepts">
           <div class="min-h-screen bg-background safe-bottom">
             <div class="mx-auto max-w-md px-4 py-4 flex flex-col gap-4">
               <div class="flex items-center justify-between mb-1">
                 <div class="flex items-center gap-2">
-                  ${icon('lightbulb', 'w-5 h-5 text-fall')}
+                  ${icon('lightbulb', 'w-5 h-5 text-hot')}
                   <h1 class="text-xl font-bold text-foreground">热门概念</h1>
                 </div>
-                <span class="text-xs text-muted-foreground">最热 10 个板块</span>
+                <span class="text-xs text-muted-foreground">基于新闻热度</span>
               </div>
+              ${concepts.length > 0 ? `
               <div class="space-y-3">
-                ${hotConcepts.map(c => {
-                  const rise = c.change >= 0;
+                ${concepts.map(c => {
+                  const isUp = c.trend === 'up';
                   return `
                     <div class="bg-card rounded-xl p-4 shadow-soft">
                       <div class="flex items-center justify-between mb-3">
@@ -598,34 +664,37 @@
                           <div>
                             <div class="flex items-center gap-2">
                               <span class="text-sm font-bold text-foreground">${esc(c.name)}</span>
-                              ${c.isHot ? '<span class="text-[9px] px-1.5 py-0.5 bg-hot/15 text-hot rounded font-bold">HOT</span>' : ''}
+                              ${c.rank <= 3 ? '<span class="text-[9px] px-1.5 py-0.5 bg-hot/15 text-hot rounded font-bold">HOT</span>' : ''}
                             </div>
-                            <div class="text-[10px] text-muted-foreground mt-0.5">${c.stockCount}只 · 净流入${c.netInflow}亿</div>
+                            <div class="text-[10px] text-muted-foreground mt-0.5">热度指数 ${c.score}</div>
                           </div>
                         </div>
-                        <span class="text-lg font-bold font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${c.change.toFixed(2)}%</span>
+                        <span class="text-xs font-medium ${isUp ? 'text-rise' : c.trend === 'down' ? 'text-fall' : 'text-muted-foreground'}">
+                          ${isUp ? '↑ 升温' : c.trend === 'down' ? '↓ 降温' : '→ 持平'}
+                        </span>
                       </div>
+                      ${c.leaders && c.leaders.length > 0 ? `
                       <div class="pt-3 border-t border-border/60">
-                        <div class="text-[11px] text-muted-foreground mb-2">龙头股</div>
+                        <div class="text-[11px] text-muted-foreground mb-2">龙头标的</div>
                         <div class="flex gap-2">
-                          ${c.leaders.map(s => {
-                            const sr = s.change >= 0;
-                            return `
-                              <div class="flex-1 bg-accent/60 rounded-lg p-2">
-                                <div class="text-xs font-medium text-foreground truncate">${esc(s.name)}</div>
-                                <div class="flex items-center justify-between mt-1">
-                                  <span class="text-[10px] text-muted-foreground font-din">${esc(s.code)}</span>
-                                  <span class="text-[11px] font-bold font-din ${sr ? 'text-rise' : 'text-fall'}">${sr ? '+' : ''}${s.change.toFixed(2)}%</span>
-                                </div>
-                              </div>
-                            `;
-                          }).join('')}
+                          ${c.leaders.slice(0, 3).map(s => `
+                            <div class="flex-1 bg-accent/60 rounded-lg p-2">
+                              <div class="text-xs font-medium text-foreground truncate">${esc(s.name)}</div>
+                              <div class="text-[10px] text-muted-foreground font-din mt-0.5">${esc(s.code)} · ${s.region === 'us' ? '美股' : 'A股'}</div>
+                            </div>
+                          `).join('')}
                         </div>
                       </div>
+                      ` : ''}
                     </div>
                   `;
                 }).join('')}
               </div>
+              ` : `
+              <div class="bg-card rounded-xl p-8 text-center">
+                <div class="text-muted-foreground text-sm">暂无热门概念数据</div>
+              </div>
+              `}
             </div>
           </div>
         </div>
@@ -635,9 +704,9 @@
     function renderBottomNav() {
       const tabs = [
         { key: 'overview', label: '概览', icon: 'home' },
-        { key: 'us', label: '美股', icon: 'trending-up' },
-        { key: 'metals', label: '有色', icon: 'gem' },
-        { key: 'news', label: '新闻', icon: 'newspaper' },
+        { key: 'us', label: '国际', icon: 'globe' },
+        { key: 'metals', label: '贵金属', icon: 'gem' },
+        { key: 'news', label: '资讯', icon: 'newspaper' },
         { key: 'concepts', label: '概念', icon: 'lightbulb' },
       ];
       return `
@@ -737,10 +806,18 @@
       render();
     }
 
+    function setNewsTab(tab) {
+      state.newsTab = tab;
+      render();
+    }
+
     // ============ 初始化 ============
     render();
+    loadNewsData().then(() => render());
     refreshAll();
     setInterval(refreshAll, 120000);
+    // 每30分钟刷新一次新闻
+    setInterval(() => { loadNewsData().then(() => render()); }, 1800000);
   </script>
 </body>
 </html>
