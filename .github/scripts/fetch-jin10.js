@@ -355,9 +355,117 @@ function generateConceptAnalysis(news) {
     '中特估/国企': ['中特估', '国企改革', '央企', '估值重塑'],
   };
   
+  // 概念AI分析模板
+  const conceptAnalysisMap = {
+    'AI/人工智能': {
+      bullish: 'AI产业加速落地，算力需求持续爆发，光模块/服务器链接受益明确',
+      bearish: 'AI板块估值偏高，需警惕业绩兑现不及预期风险',
+      neutral: 'AI主题热度延续，板块内部分化，关注业绩兑现能力强的龙头',
+      logic: '核心逻辑：大模型迭代→算力需求→光模块/服务器→应用落地',
+    },
+    '新能源': {
+      bullish: '新能源装机超预期，产业链盈利修复，龙头估值具备吸引力',
+      bearish: '产能过剩压力仍在，价格战持续压制板块盈利能力',
+      neutral: '新能源板块处于底部震荡，关注供需格局改善的细分方向',
+      logic: '核心逻辑：装机增长→盈利修复→龙头集中度提升',
+    },
+    '贵金属': {
+      bullish: '降息预期升温+地缘避险，黄金价格中枢持续上移',
+      bearish: '美元走强压制金价，短期涨幅过大存在回调风险',
+      neutral: '黄金高位震荡，多空因素交织，关注美联储政策信号',
+      logic: '核心逻辑：美联储降息→美元走弱→金价上涨→黄金股业绩弹性',
+    },
+    '原油/能源': {
+      bullish: 'OPEC+减产支撑油价，能源股高股息具备配置价值',
+      bearish: '需求放缓担忧压制油价，能源板块上行空间有限',
+      neutral: '油价区间震荡，能源股高股息属性突出，防守价值明显',
+      logic: '核心逻辑：OPEC+供给调控→油价中枢→上游油气盈利',
+    },
+    '有色金属': {
+      bullish: '全球经济复苏预期升温，铜铝等工业金属需求改善',
+      bearish: '需求端仍有不确定性，金属价格上行承压',
+      neutral: '有色金属震荡格局，关注供需边际变化和库存走势',
+      logic: '核心逻辑：经济复苏→工业需求→金属价格→资源股业绩',
+    },
+    '美联储/降息': {
+      bullish: '降息周期开启，全球流动性宽松，利好风险资产估值修复',
+      bearish: '降息预期已充分定价，实际降息节奏可能慢于预期',
+      neutral: '降息路径尚不明朗，市场观望情绪浓厚，等待明确信号',
+      logic: '核心逻辑：美联储政策转向→美元流动性→全球资产定价',
+    },
+    '地缘政治': {
+      bullish: '地缘冲突升级推升避险情绪，黄金军工板块直接受益',
+      bearish: '地缘风险边际缓和，避险资产面临回调压力',
+      neutral: '地缘局势持续紧张但未升级，市场影响趋于钝化',
+      logic: '核心逻辑：冲突升级→避险情绪→黄金/军工/能源异动',
+    },
+    '消费/内需': {
+      bullish: '消费政策持续发力，内需复苏预期升温，板块估值修复',
+      bearish: '消费复苏力度偏弱，居民收入预期制约消费反弹空间',
+      neutral: '消费板块温和复苏，结构性机会为主，关注高端消费韧性',
+      logic: '核心逻辑：政策刺激→居民收入→消费复苏→龙头业绩',
+    },
+    '医药/创新药': {
+      bullish: '创新药出海突破，医保谈判温和，板块估值修复空间大',
+      bearish: '集采压力仍存，创新药商业化进度存在不确定性',
+      neutral: '医药板块底部震荡，创新药和医疗器械结构性机会突出',
+      logic: '核心逻辑：创新突破→医保支持→业绩兑现→估值修复',
+    },
+    '房地产': {
+      bullish: '地产政策持续放松，销售边际改善，板块估值修复可期',
+      bearish: '行业基本面仍弱，销售复苏乏力，板块缺乏持续上涨动力',
+      neutral: '政策托底但需求偏弱，地产板块震荡筑底，关注龙头央企',
+      logic: '核心逻辑：政策放松→销售企稳→房企信用修复→估值回升',
+    },
+    '金融/券商': {
+      bullish: '市场情绪回暖+政策利好，券商板块贝塔属性凸显',
+      bearish: '成交量低迷，券商业绩承压，板块缺乏上涨催化剂',
+      neutral: '金融板块估值处于低位，等待市场情绪和成交量回暖信号',
+      logic: '核心逻辑：市场情绪→成交量→券商业绩→板块行情',
+    },
+    '机器人': {
+      bullish: '人形机器人产业化加速，核心零部件厂商率先受益',
+      bearish: '产业化进度慢于预期，板块估值偏高存在回调风险',
+      neutral: '机器人主题持续催化，关注核心零部件和整机厂进展',
+      logic: '核心逻辑：技术突破→产业化落地→核心零部件放量',
+    },
+    '汽车/整车': {
+      bullish: '新能源车销量持续高增，出口超预期，龙头优势扩大',
+      bearish: '价格战加剧，行业盈利承压，板块估值面临压制',
+      neutral: '汽车销量温和增长，行业竞争加剧，关注龙头集中度提升',
+      logic: '核心逻辑：销量增长→份额集中→龙头盈利改善',
+    },
+    '军工/国防': {
+      bullish: '国防预算稳定增长，军工订单确定性强，板块估值合理',
+      bearish: '业绩释放节奏偏慢，板块缺乏催化，上涨动力不足',
+      neutral: '军工板块业绩确定性强，估值处于合理区间，关注订单落地',
+      logic: '核心逻辑：国防预算→订单释放→业绩兑现→板块行情',
+    },
+    '数据要素': {
+      bullish: '数据要素政策持续落地，数据资产化加速推进',
+      bearish: '商业模式仍在探索，业绩兑现尚需时日',
+      neutral: '数据要素政策催化不断，关注数据运营和信创龙头',
+      logic: '核心逻辑：政策推动→数据资产化→运营平台价值重估',
+    },
+    '中特估/国企': {
+      bullish: '国企改革深化，央企估值重塑，高股息属性凸显',
+      bearish: '中特估主题缺乏新催化，板块进入震荡整理',
+      neutral: '央企估值偏低，高股息+改革预期，配置价值凸显',
+      logic: '核心逻辑：国企改革→效率提升→估值重塑→行情演绎',
+    },
+  };
+  
+  // 多空关键词判断
+  const bullWords = ['上涨', '利好', '增长', '超预期', '突破', '创新高', '强劲', '复苏', '回暖', '加速', '降息', '宽松', '支持', '提振', '受益', '盈利', '增利', '爆发', '高增', '超预期'];
+  const bearWords = ['下跌', '利空', '下滑', '不及预期', '暴跌', '崩盘', '疲软', '衰退', '降温', '放缓', '加息', '收紧', '打压', '担忧', '亏损', '承压', '风险', '过剩', '战', '制裁'];
+  
   for (const [concept, keywords] of Object.entries(conceptKeywords)) {
     let score = 0;
+    let bullScore = 0;
+    let bearScore = 0;
     const relatedNews = [];
+    const keyEvents = [];
+    
     for (const n of news) {
       const text = (n.title || '') + ' ' + (n.intro || '');
       let hit = 0;
@@ -368,10 +476,25 @@ function generateConceptAnalysis(news) {
       if (hit > 0) {
         score += hit;
         relatedNews.push(n.title);
+        // 统计多空
+        for (const bw of bullWords) if (text.includes(bw)) bullScore++;
+        for (const bw of bearWords) if (text.includes(bw)) bearScore++;
+        // 提取关键事件
+        if (n.intro && n.intro.length > 10) {
+          const shortEvent = n.intro.replace(/\s+/g, '').substring(0, 30);
+          if (!keyEvents.includes(shortEvent)) keyEvents.push(shortEvent);
+        }
       }
     }
     if (score > 0) {
-      conceptMap[concept] = { name: concept, score, news: relatedNews.slice(0, 3) };
+      conceptMap[concept] = { 
+        name: concept, 
+        score, 
+        news: relatedNews.slice(0, 3),
+        bullScore,
+        bearScore,
+        keyEvents: keyEvents.slice(0, 2),
+      };
     }
   }
   
@@ -479,14 +602,28 @@ function generateConceptAnalysis(news) {
     ],
   };
   
-  return hotConcepts.map((c, i) => ({
-    rank: i + 1,
-    name: c.name,
-    score: c.score,
-    trend: i < 5 ? 'up' : (i > 10 ? 'down' : 'flat'),
-    leaders: aShareLeadersMap[c.name] || [],
-    relatedNews: c.news,
-  }));
+  return hotConcepts.map((c, i) => {
+    // 多空判断
+    let sentiment = '中性';
+    if (c.bullScore > c.bearScore + 2) sentiment = '看多';
+    else if (c.bearScore > c.bullScore + 2) sentiment = '看空';
+    
+    const analysis = conceptAnalysisMap[c.name] || { bullish: '', bearish: '', neutral: '', logic: '' };
+    const summary = sentiment === '看多' ? analysis.bullish : sentiment === '看空' ? analysis.bearish : analysis.neutral;
+    
+    return {
+      rank: i + 1,
+      name: c.name,
+      score: c.score,
+      trend: i < 5 ? 'up' : (i > 10 ? 'down' : 'flat'),
+      sentiment: sentiment,
+      aiSummary: summary,
+      coreLogic: analysis.logic,
+      leaders: aShareLeadersMap[c.name] || [],
+      relatedNews: c.news,
+      keyEvents: c.keyEvents,
+    };
+  });
 }
 
 // 为新闻生成AI智能分析的一句话要闻和高度相关的A股
