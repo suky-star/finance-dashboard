@@ -489,95 +489,566 @@ function generateConceptAnalysis(news) {
   }));
 }
 
-// 为新闻生成一句话摘要和关联A股
+// 为新闻生成AI智能分析的一句话要闻和高度相关的A股
 function enrichNewsWithSummaryAndStocks(news) {
-  // A股关联映射：关键词 -> 相关A股
-  const stockKeywordMap = {
-    '美联储': ['山东黄金 600547', '中金黄金 600489', '招商银行 600036'],
-    '美债': ['招商银行 600036', '宁波银行 002142', '平安银行 000001'],
-    '降息': ['山东黄金 600547', '招商银行 600036', '保利发展 600048'],
-    '加息': ['招商银行 600036', '宁波银行 002142', '中国平安 601318'],
-    '鲍威尔': ['山东黄金 600547', '招商银行 600036', '中金黄金 600489'],
-    '美元': ['山东黄金 600547', '紫金矿业 601899', '中国海油 600938'],
-    '通胀': ['贵州茅台 600519', '紫金矿业 601899', '山东黄金 600547'],
-    '避险': ['山东黄金 600547', '中金黄金 600489', '紫金矿业 601899'],
-    '中东': ['山东黄金 600547', '中国海油 600938', '中国石油 601857'],
-    'OPEC': ['中国海油 600938', '中国石油 601857', '中国石化 600028'],
-    '金价': ['山东黄金 600547', '紫金矿业 601899', '中金黄金 600489'],
-    '油价': ['中国海油 600938', '中国石油 601857', '中国神华 601088'],
-    '杰克逊霍尔': ['山东黄金 600547', '招商银行 600036', '中金黄金 600489'],
-    '央行': ['招商银行 600036', '宁波银行 002142', '中国平安 601318'],
-    'A股': ['中信证券 600030', '东方财富 300059', '贵州茅台 600519'],
-    '港股': ['腾讯控股 00700', '阿里巴巴 09988', '美团 03690'],
-    'AI': ['中际旭创 300308', '新易盛 300502', '寒武纪 688256'],
-    '人工智能': ['中际旭创 300308', '科大讯飞 002230', '海康威视 002415'],
-    '大模型': ['科大讯飞 002230', '三六零 601360', '昆仑万维 300418'],
-    '算力': ['浪潮信息 000977', '中科曙光 603019', '紫光股份 000938'],
-    '光模块': ['中际旭创 300308', '新易盛 300502', '天孚通信 300394'],
-    '芯片': ['中芯国际 688981', '北方华创 002371', '韦尔股份 603501'],
-    '半导体': ['中芯国际 688981', '北方华创 002371', '兆易创新 603986'],
-    '黄金': ['山东黄金 600547', '紫金矿业 601899', '中金黄金 600489'],
-    '白银': ['盛达资源 000603', '兴业银锡 000426', '湖南黄金 002155'],
-    '原油': ['中国海油 600938', '中国石油 601857', '中国石化 600028'],
-    '铜': ['紫金矿业 601899', '江西铜业 600362', '铜陵有色 000630'],
-    '新能源': ['宁德时代 300750', '比亚迪 002594', '隆基绿能 601012'],
-    '光伏': ['隆基绿能 601012', '通威股份 600438', '阳光电源 300274'],
-    '锂电': ['宁德时代 300750', '天齐锂业 002466', '赣锋锂业 002460'],
-    '比亚迪': ['比亚迪 002594', '赛力斯 601127', '长安汽车 000625'],
-    '汽车': ['比亚迪 002594', '长安汽车 000625', '长城汽车 601633'],
-    '消费': ['贵州茅台 600519', '五粮液 000858', '中国中免 601888'],
-    '白酒': ['贵州茅台 600519', '五粮液 000858', '泸州老窖 000568'],
-    '医药': ['恒瑞医药 600276', '药明康德 603259', '迈瑞医疗 300760'],
-    '券商': ['中信证券 600030', '东方财富 300059', '华泰证券 601688'],
-    '银行': ['招商银行 600036', '宁波银行 002142', '工商银行 601398'],
-    '地产': ['保利发展 600048', '万科A 000002', '招商蛇口 001979'],
-    '房地产': ['保利发展 600048', '万科A 000002', '招商蛇口 001979'],
-    '机器人': ['汇川技术 300124', '埃斯顿 002747', '绿的谐波 688017'],
-    '军工': ['中航沈飞 600760', '航发动力 600893', '中国船舶 600150'],
-    '数据': ['浪潮信息 000977', '中科曙光 603019', '易华录 300212'],
-    '信创': ['中国软件 600536', '太极股份 002368', '诚迈科技 300598'],
-    '储能': ['宁德时代 300750', '阳光电源 300274', '派能科技 688063'],
-    '风电': ['金风科技 002202', '明阳智能 601615', '东方电缆 603606'],
-    '煤炭': ['中国神华 601088', '陕西煤业 601225', '兖矿能源 600188'],
-    '央企': ['中国移动 600941', '中国电信 601728', '中国联通 600050'],
-    '国企': ['中国移动 600941', '中国电信 601728', '中国石油 601857'],
-    '经济': ['贵州茅台 600519', '招商银行 600036', '中国平安 601318'],
-    '增长': ['贵州茅台 600519', '宁德时代 300750', '比亚迪 002594'],
+  // 关键词权重映射：关键词 -> { 权重, 关联股票: [{name, code, weight}] }
+  // 权重越高表示该关键词与新闻的相关性越强
+  const keywordAnalysisMap = {
+    // ===== 宏观政策类（高权重） =====
+    '美联储': {
+      weight: 10,
+      impact: '美联储政策直接影响全球流动性和美元走势',
+      stocks: [
+        { name: '山东黄金', code: '600547', weight: 9, reason: '降息预期升温利好金价' },
+        { name: '中金黄金', code: '600489', weight: 8, reason: '黄金板块直接受益' },
+        { name: '招商银行', code: '600036', weight: 6, reason: '利率敏感型银行股' },
+      ]
+    },
+    '美债': {
+      weight: 8,
+      impact: '美债收益率攀升推高全球融资成本',
+      stocks: [
+        { name: '招商银行', code: '600036', weight: 7, reason: '利率敏感型银行股' },
+        { name: '宁波银行', code: '002142', weight: 6, reason: '城商行利率敏感性高' },
+        { name: '平安银行', code: '000001', weight: 5, reason: '零售行受息差影响' },
+      ]
+    },
+    '降息': {
+      weight: 9,
+      impact: '降息释放流动性，利好风险资产',
+      stocks: [
+        { name: '山东黄金', code: '600547', weight: 9, reason: '降息直接利好黄金' },
+        { name: '招商银行', code: '600036', weight: 6, reason: '银行股估值修复' },
+        { name: '保利发展', code: '600048', weight: 7, reason: '地产板块受益利率下行' },
+      ]
+    },
+    '加息': {
+      weight: 9,
+      impact: '加息收紧流动性，压制风险资产估值',
+      stocks: [
+        { name: '招商银行', code: '600036', weight: 6, reason: '加息利好银行息差' },
+        { name: '宁波银行', code: '002142', weight: 5, reason: '城商行息差弹性大' },
+        { name: '中国平安', code: '601318', weight: 5, reason: '保险投资端受益' },
+      ]
+    },
+    '鲍威尔': {
+      weight: 8,
+      impact: '美联储主席表态直接影响市场预期',
+      stocks: [
+        { name: '山东黄金', code: '600547', weight: 8, reason: '金价对美联储政策敏感' },
+        { name: '中金黄金', code: '600489', weight: 7, reason: '黄金板块联动' },
+        { name: '招商银行', code: '600036', weight: 5, reason: '银行利率敏感性' },
+      ]
+    },
+    '杰克逊霍尔': {
+      weight: 7,
+      impact: '全球央行年会释放货币政策信号',
+      stocks: [
+        { name: '山东黄金', code: '600547', weight: 8, reason: '政策信号影响金价' },
+        { name: '招商银行', code: '600036', weight: 5, reason: '利率预期影响银行估值' },
+        { name: '中金黄金', code: '600489', weight: 7, reason: '黄金板块联动' },
+      ]
+    },
+    '央行': {
+      weight: 7,
+      impact: '央行货币政策决定市场流动性',
+      stocks: [
+        { name: '招商银行', code: '600036', weight: 7, reason: '银行直接受政策影响' },
+        { name: '宁波银行', code: '002142', weight: 6, reason: '城商行政策弹性大' },
+        { name: '中国平安', code: '601318', weight: 5, reason: '保险投资端受利率影响' },
+      ]
+    },
+    '通胀': {
+      weight: 8,
+      impact: '通胀水平决定货币政策走向',
+      stocks: [
+        { name: '贵州茅台', code: '600519', weight: 6, reason: '消费龙头抗通胀属性' },
+        { name: '紫金矿业', code: '601899', weight: 7, reason: '大宗商品抗通胀' },
+        { name: '山东黄金', code: '600547', weight: 8, reason: '黄金抗通胀首选' },
+      ]
+    },
+    '美元': {
+      weight: 7,
+      impact: '美元走势影响大宗商品价格和资本流动',
+      stocks: [
+        { name: '山东黄金', code: '600547', weight: 8, reason: '金价与美元负相关' },
+        { name: '紫金矿业', code: '601899', weight: 7, reason: '有色金属定价受美元影响' },
+        { name: '中国海油', code: '600938', weight: 6, reason: '原油以美元计价' },
+      ]
+    },
+
+    // ===== 地缘政治类 =====
+    '避险': {
+      weight: 8,
+      impact: '避险情绪升温利好黄金、国债等安全资产',
+      stocks: [
+        { name: '山东黄金', code: '600547', weight: 9, reason: '黄金是核心避险资产' },
+        { name: '中金黄金', code: '600489', weight: 8, reason: '黄金板块直接受益' },
+        { name: '紫金矿业', code: '601899', weight: 7, reason: '铜金双重属性' },
+      ]
+    },
+    '中东': {
+      weight: 7,
+      impact: '中东局势紧张推升油价和避险情绪',
+      stocks: [
+        { name: '中国海油', code: '600938', weight: 8, reason: '原油供给担忧推升油价' },
+        { name: '中国石油', code: '601857', weight: 7, reason: '上游油气受益油价上涨' },
+        { name: '山东黄金', code: '600547', weight: 7, reason: '避险情绪利好黄金' },
+      ]
+    },
+    '地缘': {
+      weight: 6,
+      impact: '地缘冲突加剧市场不确定性',
+      stocks: [
+        { name: '山东黄金', code: '600547', weight: 8, reason: '避险首选黄金' },
+        { name: '中航沈飞', code: '600760', weight: 6, reason: '军工板块事件驱动' },
+        { name: '中国船舶', code: '600150', weight: 5, reason: '海军装备需求' },
+      ]
+    },
+
+    // ===== 大宗商品类 =====
+    'OPEC': {
+      weight: 8,
+      impact: 'OPEC减产决定直接影响原油供给',
+      stocks: [
+        { name: '中国海油', code: '600938', weight: 9, reason: '纯上游油气公司' },
+        { name: '中国石油', code: '601857', weight: 7, reason: '上游业务占比高' },
+        { name: '中国石化', code: '600028', weight: 5, reason: '炼化占比高，弹性小' },
+      ]
+    },
+    '金价': {
+      weight: 9,
+      impact: '金价变动直接影响黄金公司盈利',
+      stocks: [
+        { name: '山东黄金', code: '600547', weight: 10, reason: '纯黄金标的，弹性最大' },
+        { name: '紫金矿业', code: '601899', weight: 7, reason: '铜金双主业' },
+        { name: '中金黄金', code: '600489', weight: 9, reason: '黄金主业占比高' },
+      ]
+    },
+    '黄金': {
+      weight: 9,
+      impact: '黄金价格走势影响板块整体估值',
+      stocks: [
+        { name: '山东黄金', code: '600547', weight: 10, reason: 'A股黄金龙头' },
+        { name: '紫金矿业', code: '601899', weight: 7, reason: '全球矿业巨头' },
+        { name: '中金黄金', code: '600489', weight: 9, reason: '央企黄金平台' },
+      ]
+    },
+    '白银': {
+      weight: 7,
+      impact: '白银价格上涨利好白银生产企业',
+      stocks: [
+        { name: '盛达资源', code: '000603', weight: 8, reason: '白银龙头' },
+        { name: '兴业银锡', code: '000426', weight: 7, reason: '银锡双主业' },
+        { name: '湖南黄金', code: '002155', weight: 6, reason: '黄金白银伴生' },
+      ]
+    },
+    '油价': {
+      weight: 8,
+      impact: '油价波动影响油气公司盈利和化工成本',
+      stocks: [
+        { name: '中国海油', code: '600938', weight: 9, reason: '纯上游弹性最大' },
+        { name: '中国石油', code: '601857', weight: 7, reason: '上游占比高' },
+        { name: '中国神华', code: '601088', weight: 5, reason: '煤炭替代能源' },
+      ]
+    },
+    '原油': {
+      weight: 8,
+      impact: '原油价格影响能源板块整体',
+      stocks: [
+        { name: '中国海油', code: '600938', weight: 9, reason: '上游龙头' },
+        { name: '中国石油', code: '601857', weight: 7, reason: '一体化油气巨头' },
+        { name: '中国石化', code: '600028', weight: 5, reason: '炼化为主' },
+      ]
+    },
+    '铜': {
+      weight: 7,
+      impact: '铜价反映全球经济景气度',
+      stocks: [
+        { name: '紫金矿业', code: '601899', weight: 9, reason: '国内铜资源龙头' },
+        { name: '江西铜业', code: '600362', weight: 8, reason: '铜业龙头' },
+        { name: '铜陵有色', code: '000630', weight: 7, reason: '铜加工+冶炼' },
+      ]
+    },
+    '煤炭': {
+      weight: 7,
+      impact: '煤价影响煤企业绩和能源结构',
+      stocks: [
+        { name: '中国神华', code: '601088', weight: 8, reason: '煤炭龙头，高股息' },
+        { name: '陕西煤业', code: '601225', weight: 7, reason: '优质动力煤' },
+        { name: '兖矿能源', code: '600188', weight: 7, reason: '煤电化一体化' },
+      ]
+    },
+
+    // ===== 科技产业类 =====
+    'AI': {
+      weight: 9,
+      impact: 'AI产业爆发带动算力、光模块、芯片需求',
+      stocks: [
+        { name: '中际旭创', code: '300308', weight: 9, reason: '光模块全球龙头' },
+        { name: '新易盛', code: '300502', weight: 8, reason: '光模块主力厂商' },
+        { name: '寒武纪', code: '688256', weight: 7, reason: 'AI芯片国产替代' },
+      ]
+    },
+    '人工智能': {
+      weight: 9,
+      impact: '人工智能是科技产业核心赛道',
+      stocks: [
+        { name: '中际旭创', code: '300308', weight: 9, reason: '算力基础设施核心' },
+        { name: '科大讯飞', code: '002230', weight: 7, reason: 'AI应用龙头' },
+        { name: '海康威视', code: '002415', weight: 6, reason: 'AI+安防龙头' },
+      ]
+    },
+    '大模型': {
+      weight: 8,
+      impact: '大模型竞争推动AI产业发展',
+      stocks: [
+        { name: '科大讯飞', code: '002230', weight: 8, reason: '星火大模型' },
+        { name: '三六零', code: '601360', weight: 7, reason: '360大模型' },
+        { name: '昆仑万维', code: '300418', weight: 7, reason: '天工大模型' },
+      ]
+    },
+    '算力': {
+      weight: 8,
+      impact: '算力是AI时代核心基础设施',
+      stocks: [
+        { name: '浪潮信息', code: '000977', weight: 9, reason: 'AI服务器龙头' },
+        { name: '中科曙光', code: '603019', weight: 8, reason: '高性能计算龙头' },
+        { name: '紫光股份', code: '000938', weight: 7, reason: '新华三算力设备' },
+      ]
+    },
+    '光模块': {
+      weight: 9,
+      impact: '光模块是AI算力网络核心器件',
+      stocks: [
+        { name: '中际旭创', code: '300308', weight: 10, reason: '全球光模块龙头' },
+        { name: '新易盛', code: '300502', weight: 9, reason: '高速光模块主力' },
+        { name: '天孚通信', code: '300394', weight: 8, reason: '光器件龙头' },
+      ]
+    },
+    '芯片': {
+      weight: 8,
+      impact: '芯片是科技产业自主可控核心',
+      stocks: [
+        { name: '中芯国际', code: '688981', weight: 9, reason: '晶圆制造龙头' },
+        { name: '北方华创', code: '002371', weight: 8, reason: '半导体设备龙头' },
+        { name: '韦尔股份', code: '603501', weight: 7, reason: 'CIS芯片龙头' },
+      ]
+    },
+    '半导体': {
+      weight: 8,
+      impact: '半导体国产替代是长期主线',
+      stocks: [
+        { name: '中芯国际', code: '688981', weight: 9, reason: '制造环节龙头' },
+        { name: '北方华创', code: '002371', weight: 8, reason: '设备龙头' },
+        { name: '兆易创新', code: '603986', weight: 7, reason: '存储芯片龙头' },
+      ]
+    },
+
+    // ===== 新能源类 =====
+    '新能源': {
+      weight: 8,
+      impact: '新能源是双碳战略核心赛道',
+      stocks: [
+        { name: '宁德时代', code: '300750', weight: 9, reason: '动力电池全球龙头' },
+        { name: '比亚迪', code: '002594', weight: 9, reason: '新能源车全产业链' },
+        { name: '隆基绿能', code: '601012', weight: 7, reason: '光伏组件龙头' },
+      ]
+    },
+    '光伏': {
+      weight: 8,
+      impact: '光伏装机增长带动产业链需求',
+      stocks: [
+        { name: '隆基绿能', code: '601012', weight: 9, reason: '组件全球龙头' },
+        { name: '通威股份', code: '600438', weight: 8, reason: '硅料+电池片龙头' },
+        { name: '阳光电源', code: '300274', weight: 8, reason: '逆变器龙头' },
+      ]
+    },
+    '锂电': {
+      weight: 8,
+      impact: '锂电池是新能源车核心部件',
+      stocks: [
+        { name: '宁德时代', code: '300750', weight: 10, reason: '动力电池绝对龙头' },
+        { name: '天齐锂业', code: '002466', weight: 7, reason: '锂资源龙头' },
+        { name: '赣锋锂业', code: '002460', weight: 7, reason: '锂盐龙头' },
+      ]
+    },
+    '储能': {
+      weight: 7,
+      impact: '储能是新能源消纳关键环节',
+      stocks: [
+        { name: '宁德时代', code: '300750', weight: 9, reason: '储能电池龙头' },
+        { name: '阳光电源', code: '300274', weight: 8, reason: '储能逆变器龙头' },
+        { name: '派能科技', code: '688063', weight: 7, reason: '户储龙头' },
+      ]
+    },
+    '风电': {
+      weight: 6,
+      impact: '风电装机增长带动产业链',
+      stocks: [
+        { name: '金风科技', code: '002202', weight: 8, reason: '风机龙头' },
+        { name: '明阳智能', code: '601615', weight: 7, reason: '海风龙头' },
+        { name: '东方电缆', code: '603606', weight: 7, reason: '海缆龙头' },
+      ]
+    },
+
+    // ===== 消费类 =====
+    '消费': {
+      weight: 7,
+      impact: '消费复苏是经济增长重要动力',
+      stocks: [
+        { name: '贵州茅台', code: '600519', weight: 9, reason: '消费龙头，品牌护城河' },
+        { name: '五粮液', code: '000858', weight: 7, reason: '白酒次高端龙头' },
+        { name: '中国中免', code: '601888', weight: 6, reason: '免税消费龙头' },
+      ]
+    },
+    '白酒': {
+      weight: 8,
+      impact: '白酒是消费板块核心资产',
+      stocks: [
+        { name: '贵州茅台', code: '600519', weight: 10, reason: '白酒绝对龙头' },
+        { name: '五粮液', code: '000858', weight: 8, reason: '浓香龙头' },
+        { name: '泸州老窖', code: '000568', weight: 7, reason: '高端白酒第三极' },
+      ]
+    },
+    '比亚迪': {
+      weight: 9,
+      impact: '比亚迪是新能源车产业风向标',
+      stocks: [
+        { name: '比亚迪', code: '002594', weight: 10, reason: '新能源车销量冠军' },
+        { name: '赛力斯', code: '601127', weight: 7, reason: '华为合作车企' },
+        { name: '长安汽车', code: '000625', weight: 6, reason: '自主车企龙头' },
+      ]
+    },
+    '汽车': {
+      weight: 7,
+      impact: '汽车消费是内需重要支柱',
+      stocks: [
+        { name: '比亚迪', code: '002594', weight: 9, reason: '新能源汽车龙头' },
+        { name: '长安汽车', code: '000625', weight: 7, reason: '自主品牌龙头' },
+        { name: '长城汽车', code: '601633', weight: 6, reason: 'SUV/皮卡龙头' },
+      ]
+    },
+
+    // ===== 金融地产类 =====
+    '券商': {
+      weight: 8,
+      impact: '券商是牛市风向标，贝塔属性强',
+      stocks: [
+        { name: '中信证券', code: '600030', weight: 9, reason: '行业龙头' },
+        { name: '东方财富', code: '300059', weight: 8, reason: '互联网券商龙头' },
+        { name: '华泰证券', code: '601688', weight: 7, reason: '财富管理龙头' },
+      ]
+    },
+    '银行': {
+      weight: 7,
+      impact: '银行是金融体系核心',
+      stocks: [
+        { name: '招商银行', code: '600036', weight: 9, reason: '零售银行龙头' },
+        { name: '宁波银行', code: '002142', weight: 8, reason: '城商行龙头' },
+        { name: '工商银行', code: '601398', weight: 6, reason: '国有大行龙头' },
+      ]
+    },
+    '地产': {
+      weight: 7,
+      impact: '地产政策影响产业链投资机会',
+      stocks: [
+        { name: '保利发展', code: '600048', weight: 8, reason: '央企地产龙头' },
+        { name: '万科A', code: '000002', weight: 7, reason: '行业标杆' },
+        { name: '招商蛇口', code: '001979', weight: 7, reason: '央企开发商' },
+      ]
+    },
+    '房地产': {
+      weight: 7,
+      impact: '房地产是经济重要支柱产业',
+      stocks: [
+        { name: '保利发展', code: '600048', weight: 8, reason: '央企地产龙头' },
+        { name: '万科A', code: '000002', weight: 7, reason: '行业标杆' },
+        { name: '招商蛇口', code: '001979', weight: 7, reason: '央企开发商' },
+      ]
+    },
+
+    // ===== 其他板块 =====
+    '医药': {
+      weight: 7,
+      impact: '医药是长期刚需，创新药是核心方向',
+      stocks: [
+        { name: '恒瑞医药', code: '600276', weight: 8, reason: '创新药龙头' },
+        { name: '药明康德', code: '603259', weight: 7, reason: 'CXO龙头' },
+        { name: '迈瑞医疗', code: '300760', weight: 8, reason: '医疗器械龙头' },
+      ]
+    },
+    '机器人': {
+      weight: 7,
+      impact: '人形机器人是AI具身化核心载体',
+      stocks: [
+        { name: '汇川技术', code: '300124', weight: 8, reason: '工控龙头' },
+        { name: '埃斯顿', code: '002747', weight: 7, reason: '工业机器人龙头' },
+        { name: '绿的谐波', code: '688017', weight: 8, reason: '谐波减速器龙头' },
+      ]
+    },
+    '军工': {
+      weight: 7,
+      impact: '军工板块受地缘事件和国防预算驱动',
+      stocks: [
+        { name: '中航沈飞', code: '600760', weight: 8, reason: '战机龙头' },
+        { name: '航发动力', code: '600893', weight: 7, reason: '航空发动机龙头' },
+        { name: '中国船舶', code: '600150', weight: 7, reason: '造船龙头' },
+      ]
+    },
+    '信创': {
+      weight: 7,
+      impact: '信创是数字经济安全底座',
+      stocks: [
+        { name: '中国软件', code: '600536', weight: 8, reason: '操作系统龙头' },
+        { name: '太极股份', code: '002368', weight: 7, reason: '信创集成龙头' },
+        { name: '诚迈科技', code: '300598', weight: 6, reason: '统信系统' },
+      ]
+    },
+    '数据要素': {
+      weight: 7,
+      impact: '数据要素是数字经济核心生产资料',
+      stocks: [
+        { name: '浪潮信息', code: '000977', weight: 7, reason: '数据基础设施' },
+        { name: '中科曙光', code: '603019', weight: 7, reason: '算力基础设施' },
+        { name: '易华录', code: '300212', weight: 8, reason: '数据湖龙头' },
+      ]
+    },
+    '央企': {
+      weight: 6,
+      impact: '中特估背景下央企估值重塑',
+      stocks: [
+        { name: '中国移动', code: '600941', weight: 8, reason: '通信运营龙头' },
+        { name: '中国电信', code: '601728', weight: 7, reason: '运营商第二梯队' },
+        { name: '中国联通', code: '600050', weight: 6, reason: '运营商混改标杆' },
+      ]
+    },
+    'A股': {
+      weight: 5,
+      impact: 'A股整体走势反映市场情绪',
+      stocks: [
+        { name: '中信证券', code: '600030', weight: 6, reason: '券商龙头，贝塔属性' },
+        { name: '东方财富', code: '300059', weight: 6, reason: '互联网券商风向标' },
+        { name: '贵州茅台', code: '600519', weight: 5, reason: '核心资产代表' },
+      ]
+    },
   };
-  
+
+  // 判断新闻的多空方向
+  function detectSentiment(text) {
+    const positiveWords = ['上涨', '利好', '增长', '超预期', '突破', '创新高', '强劲', '复苏', '回暖', '加速', '降息', '宽松', '支持', '提振', '受益', '盈利', '增利'];
+    const negativeWords = ['下跌', '利空', '下滑', '不及预期', '暴跌', '崩盘', '疲软', '衰退', '降温', '放缓', '加息', '收紧', '打压', '担忧', '亏损', '承压', '风险'];
+    
+    let posScore = 0, negScore = 0;
+    for (const w of positiveWords) if (text.includes(w)) posScore++;
+    for (const w of negativeWords) if (text.includes(w)) negScore++;
+    
+    if (posScore > negScore + 1) return '利好';
+    if (negScore > posScore + 1) return '利空';
+    return '中性';
+  }
+
   return news.map(item => {
     const text = (item.title || '') + ' ' + (item.intro || '');
     
-    // 生成一句话摘要（取intro的前50字，没有的话从标题扩展）
-    let summary = '';
-    if (item.intro && item.intro.length > 10) {
-      summary = item.intro.replace(/\s+/g, '').substring(0, 50);
-      if (item.intro.length > 50) summary += '...';
-    } else if (item.title) {
-      summary = item.title;
+    // ===== Step 1: 关键词匹配与权重分析 =====
+    const matchedKeywords = [];
+    for (const [keyword, analysis] of Object.entries(keywordAnalysisMap)) {
+      const count = (text.match(new RegExp(keyword, 'g')) || []).length;
+      if (count > 0) {
+        matchedKeywords.push({
+          keyword,
+          weight: analysis.weight * count,
+          impact: analysis.impact,
+          stocks: analysis.stocks,
+        });
+      }
     }
     
-    // 匹配关联A股
-    const relatedStocks = [];
-    const matchedKeywords = new Set();
+    // 按权重排序
+    matchedKeywords.sort((a, b) => b.weight - a.weight);
     
-    for (const [keyword, stocks] of Object.entries(stockKeywordMap)) {
-      if (text.includes(keyword)) {
-        matchedKeywords.add(keyword);
-        for (const stock of stocks) {
-          const [name, code] = stock.split(' ');
-          if (!relatedStocks.find(s => s.code === code)) {
-            relatedStocks.push({ name, code, region: 'cn' });
-          }
+    // ===== Step 2: 生成AI智能分析的一句话要闻 =====
+    let aiSummary = '';
+    const sentiment = detectSentiment(text);
+    const topKeyword = matchedKeywords[0];
+    
+    if (topKeyword) {
+      // 有核心关键词的情况下，生成结构化分析
+      const coreTopic = topKeyword.keyword;
+      const impactDesc = topKeyword.impact;
+      
+      // 从 intro 中提取关键句子
+      let keyPoint = '';
+      if (item.intro && item.intro.length > 10) {
+        const sentences = item.intro.split(/[。！？]/).filter(s => s.length > 5 && s.length < 60);
+        keyPoint = sentences[0] || item.intro.substring(0, 40);
+        keyPoint = keyPoint.replace(/\s+/g, '').replace(/^[，、；：]/, '');
+      } else {
+        keyPoint = item.title || '';
+      }
+      
+      // 组合成一句话AI分析
+      if (matchedKeywords.length >= 2) {
+        aiSummary = `【${sentiment}】${keyPoint}。核心涉及${coreTopic}、${matchedKeywords[1].keyword}，${impactDesc}。`;
+      } else {
+        aiSummary = `【${sentiment}】${keyPoint}。核心涉及${coreTopic}，${impactDesc}。`;
+      }
+      
+      // 控制长度
+      if (aiSummary.length > 80) {
+        aiSummary = aiSummary.substring(0, 77) + '...';
+      }
+    } else {
+      // 没有匹配到关键词，生成基础摘要
+      if (item.intro && item.intro.length > 10) {
+        aiSummary = item.intro.replace(/\s+/g, '').substring(0, 60);
+        if (item.intro.length > 60) aiSummary += '...';
+      } else {
+        aiSummary = item.title || '';
+      }
+    }
+    
+    // ===== Step 3: 计算个股相关性得分，取最相关的2-3只 =====
+    const stockScores = {};
+    for (const kw of matchedKeywords) {
+      for (const stock of kw.stocks) {
+        if (!stockScores[stock.code]) {
+          stockScores[stock.code] = {
+            name: stock.name,
+            code: stock.code,
+            region: 'cn',
+            score: 0,
+            reasons: [],
+          };
+        }
+        // 得分 = 关键词权重 × 股票权重 / 10
+        stockScores[stock.code].score += (kw.weight * stock.weight) / 10;
+        if (stock.reason && !stockScores[stock.code].reasons.includes(stock.reason)) {
+          stockScores[stock.code].reasons.push(stock.reason);
         }
       }
-      if (relatedStocks.length >= 5) break;
     }
+    
+    // 按得分排序，取前3只（得分>5才算高度相关）
+    const topStocks = Object.values(stockScores)
+      .sort((a, b) => b.score - a.score)
+      .filter(s => s.score >= 5)
+      .slice(0, 3)
+      .map(s => ({
+        name: s.name,
+        code: s.code,
+        region: 'cn',
+        relevance: s.score >= 15 ? '极高' : s.score >= 10 ? '高' : '中高',
+        reason: s.reasons[0] || '',
+      }));
     
     return {
       ...item,
-      summary: summary,
-      relatedStocks: relatedStocks.slice(0, 4),
+      summary: aiSummary,
+      aiTag: topKeyword ? sentiment : '待分析',
+      relatedStocks: topStocks,
+      matchedTopics: matchedKeywords.slice(0, 3).map(k => k.keyword),
     };
   });
 }
