@@ -68,6 +68,7 @@
       'trending-up': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
       'dollar-sign': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
       'zinc': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+      'bar-chart-2': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
     };
 
     const icon = (name, className = '') => {
@@ -153,6 +154,7 @@
       metals: null,
       hotTab: 'hot',
       newsTab: 'news',
+      closeTab: 'aShare',
       dynamicData: null,
       newsData: null,
       newsLoading: true,
@@ -398,8 +400,16 @@
 
     function renderUsPage() {
       const analysis = state.dynamicData?.analysis?.us;
+      const metalsAnalysis = state.dynamicData?.analysis?.metals;
+      const techAnalysis = state.dynamicData?.analysis?.techAnalysis || {};
       const quotes = state.dynamicData?.quotes || {};
       const items = analysis?.items || [quotes.XAUUSD, quotes.XAGUSD, quotes.USOIL, quotes.COPPER].filter(Boolean);
+      const newsList = state.dynamicData?.news || [];
+      
+      // 筛选贵金属相关资讯
+      const metalNews = newsList.filter(n => 
+        n.matchedTopics?.some(t => ['黄金', '白银', '贵金属', '金价', '美联储'].includes(t))
+      ).slice(0, 3);
       
       return `
         <div class="page ${state.activeTab === 'us' ? 'active' : ''}" id="page-us">
@@ -446,6 +456,78 @@
               <div class="grid grid-cols-2 gap-3">
                 ${items.map(item => renderQuoteCard(item)).join('')}
               </div>
+
+              <!-- 技术面解读 -->
+              ${techAnalysis && Object.keys(techAnalysis).length > 0 ? `
+              <div class="bg-card rounded-xl p-5 shadow-soft">
+                <div class="flex items-center gap-2 mb-4">
+                  <div class="w-7 h-7 rounded-lg bg-precious/15 flex items-center justify-center text-precious">${icon('activity', 'w-4 h-4')}</div>
+                  <h3 class="text-sm font-bold text-foreground">技术面解读</h3>
+                </div>
+                <div class="space-y-4">
+                  ${['XAUUSD', 'USOIL', 'XAGUSD', 'COPPER'].filter(code => techAnalysis[code] && quotes[code]).map(code => {
+                    const views = techAnalysis[code] || [];
+                    const quote = quotes[code];
+                    const rise = quote?.changePercent >= 0;
+                    return `
+                      <div class="pb-3 border-b border-border/60 last:border-0 last:pb-0">
+                        <div class="flex items-center justify-between mb-2">
+                          <span class="text-sm font-semibold text-foreground">${esc(quote?.name || code)}</span>
+                          <span class="text-xs font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${quote?.changePercent.toFixed(2)}%</span>
+                        </div>
+                        <div class="space-y-1.5">
+                          ${views.slice(0, 3).map(v => `
+                            <div class="flex items-start gap-2">
+                              <span class="text-${v.positive === true ? 'rise' : v.positive === false ? 'fall' : 'muted-foreground'} text-xs mt-0.5 font-bold">•</span>
+                              <span class="text-[11px] text-foreground leading-relaxed">${esc(v.text)}</span>
+                            </div>
+                          `).join('')}
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+              ` : ''}
+
+              <!-- 贵金属专区 -->
+              ${metalsAnalysis ? `
+              <div class="bg-card rounded-xl p-5 shadow-soft">
+                <div class="flex items-center justify-between mb-4">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-precious/15 flex items-center justify-center text-precious">${icon('gem', 'w-4 h-4')}</div>
+                    <h3 class="text-sm font-bold text-foreground">贵金属专区</h3>
+                  </div>
+                  <span class="text-[10px] px-2 py-0.5 bg-${metalsAnalysis.statusColor}/10 text-${metalsAnalysis.statusColor} rounded-full font-medium">${metalsAnalysis.statusLabel}</span>
+                </div>
+                <p class="text-xs text-foreground leading-relaxed mb-3">${metalsAnalysis.summary}</p>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                  ${[metalsAnalysis.xau, metalsAnalysis.xag].filter(Boolean).map(m => {
+                    const rise = m.changePercent >= 0;
+                    return `
+                      <div class="relative rounded-xl p-3 overflow-hidden" style="background: linear-gradient(135deg, hsl(43 96% 62%), hsl(43 96% 50%))">
+                        <div class="text-white/80 text-[11px] mb-1">${esc(m.name)}</div>
+                        <div class="text-white text-lg font-bold font-din">${m.price ? m.price.toFixed(2) : '--'}</div>
+                        <div class="text-white/90 text-[11px] mt-0.5 font-medium">${m.price ? (rise ? '+' : '') + m.changePercent.toFixed(2) + '%' : '--'}</div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+                ${metalsAnalysis.techViews && metalsAnalysis.techViews.length > 0 ? `
+                <div class="pt-3 border-t border-border/60">
+                  <div class="text-[11px] text-muted-foreground mb-2">技术要点</div>
+                  <div class="space-y-1.5">
+                    ${metalsAnalysis.techViews.map(v => `
+                      <div class="flex items-start gap-2">
+                        <span class="text-${v.positive === true ? 'rise' : v.positive === false ? 'fall' : 'muted-foreground'} text-xs mt-0.5 font-bold">•</span>
+                        <span class="text-[11px] text-foreground">${esc(v.text)}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+                ` : ''}
+              </div>
+              ` : ''}
 
               <div class="bg-card rounded-xl p-5 shadow-soft">
                 <h3 class="text-sm font-semibold text-foreground mb-4">涨跌幅排行</h3>
@@ -514,91 +596,227 @@
     }
 
     function renderMetalsPage() {
-      const analysis = state.dynamicData?.analysis?.metals;
-      const quotes = state.dynamicData?.quotes || {};
-      const xau = analysis?.xau || quotes.XAUUSD;
-      const xag = analysis?.xag || quotes.XAGUSD;
-      const copper = quotes.COPPER;
+      const data = state.dynamicData?.analysis?.marketClose;
+      const aShare = data?.aShare;
+      const us = data?.us;
       
-      const metals = [xau, xag].filter(Boolean);
+      const aShareActive = state.closeTab !== 'us';
       
       return `
         <div class="page ${state.activeTab === 'metals' ? 'active' : ''}" id="page-metals">
           <div class="min-h-screen bg-background safe-bottom">
-            <div class="mx-auto max-w-md px-4 py-4 flex flex-col gap-5">
+            <div class="mx-auto max-w-md px-4 py-4 flex flex-col gap-4">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  ${icon('gem', 'w-5 h-5 text-precious')}
-                  <h1 class="text-xl font-bold text-foreground">贵金属</h1>
+                  ${icon('bar-chart-2', 'w-5 h-5 text-rise')}
+                  <h1 class="text-xl font-bold text-foreground">收盘总结</h1>
                 </div>
                 <button onclick="refreshAll()" class="w-9 h-9 rounded-xl bg-accent flex items-center justify-center active:scale-95 transition-transform">
                   <span class="${state.loading ? 'animate-spin' : ''} text-primary">${icon('refresh-cw')}</span>
                 </button>
               </div>
-
-              ${analysis ? `
-              <div class="bg-card rounded-xl p-5 shadow-soft">
-                <div class="flex items-center justify-between mb-3">
-                  <div class="flex items-center gap-2">
-                    <div class="w-7 h-7 rounded-lg bg-precious/15 flex items-center justify-center text-precious">${icon('gem', 'w-4 h-4')}</div>
-                    <h3 class="text-sm font-bold text-foreground">行情综合分析</h3>
+              
+              <div class="flex bg-accent rounded-lg p-0.5">
+                <button onclick="setCloseTab('aShare')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${aShareActive ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'}">A股</button>
+                <button onclick="setCloseTab('us')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${!aShareActive ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'}">美股</button>
+              </div>
+              
+              ${aShareActive ? `
+                <!-- A股收盘总结 -->
+                ${aShare ? `
+                <!-- 三大指数 -->
+                <div class="bg-card rounded-xl p-4 shadow-soft">
+                  <div class="flex items-center gap-2 mb-3">
+                    <span class="text-xs font-bold text-rise">${aShare.marketSentiment}</span>
+                    <span class="text-[10px] text-muted-foreground">成交额 ${aShare.turnover}亿</span>
+                    <span class="text-[10px] text-muted-foreground ml-auto">${aShare.upCount}涨 / ${aShare.downCount}跌</span>
                   </div>
-                  <span class="text-[10px] px-2 py-0.5 bg-${analysis.statusColor}/10 text-${analysis.statusColor} rounded-full font-medium">${analysis.statusLabel}</span>
+                  <div class="grid grid-cols-3 gap-3">
+                    ${aShare.indices.map(idx => {
+                      const rise = parseFloat(idx.change) >= 0;
+                      return `
+                        <div class="text-center">
+                          <div class="text-[11px] text-muted-foreground mb-1">${esc(idx.name)}</div>
+                          <div class="text-base font-bold font-din ${rise ? 'text-rise' : 'text-fall'}">${idx.level?.toFixed(0) || '--'}</div>
+                          <div class="text-[11px] font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${idx.change}%</div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                  <div class="flex justify-around mt-3 pt-3 border-t border-border/60">
+                    <div class="text-center">
+                      <div class="text-xs font-bold text-rise">${aShare.limitUp}</div>
+                      <div class="text-[10px] text-muted-foreground">涨停</div>
+                    </div>
+                    <div class="text-center">
+                      <div class="text-xs font-bold text-fall">${aShare.limitDown}</div>
+                      <div class="text-[10px] text-muted-foreground">跌停</div>
+                    </div>
+                    <div class="text-center">
+                      <div class="text-xs font-bold text-rise">+${aShare.upCount - aShare.downCount}</div>
+                      <div class="text-[10px] text-muted-foreground">涨跌差</div>
+                    </div>
+                  </div>
                 </div>
-                <div class="space-y-3">
-                  <p class="text-xs text-foreground leading-relaxed">${analysis.summary}</p>
-                  <div class="bg-accent/60 rounded-lg p-3 space-y-1.5">
-                    ${analysis.factors.map(f => `
-                      <div class="flex items-start gap-2"><span class="text-${analysis.statusColor} text-xs mt-0.5 font-bold">•</span><span class="text-[11px] text-foreground">${esc(f)}</span></div>
+                
+                <!-- AI分析总结 -->
+                <div class="bg-card rounded-xl p-4 shadow-soft">
+                  <div class="flex items-center gap-2 mb-2">
+                    <div class="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center text-primary">${icon('zap', 'w-3.5 h-3.5')}</div>
+                    <span class="text-sm font-bold text-foreground">AI 收盘分析</span>
+                  </div>
+                  <p class="text-[12px] text-foreground leading-relaxed">${esc(aShare.summary)}</p>
+                </div>
+                
+                <!-- 涨幅居前板块 -->
+                <div class="bg-card rounded-xl p-4 shadow-soft">
+                  <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-bold text-foreground">涨幅居前</h3>
+                    <span class="text-[10px] text-muted-foreground">按涨幅排序</span>
+                  </div>
+                  <div class="space-y-2.5">
+                    ${aShare.topGainers.map((s, i) => `
+                      <div class="flex items-center gap-3">
+                        <span class="w-5 text-xs font-bold text-rise text-center">${i + 1}</span>
+                        <div class="flex-1 min-w-0">
+                          <div class="text-sm font-medium text-foreground">${esc(s.name)}</div>
+                          <div class="text-[10px] text-muted-foreground">主力流入 ${s.netInflow}亿</div>
+                        </div>
+                        <div class="text-right">
+                          <div class="text-sm font-bold font-din text-rise">+${s.change}%</div>
+                        </div>
+                      </div>
                     `).join('')}
                   </div>
-                  ${analysis.techViews && analysis.techViews.length > 0 ? `
-                  <div class="pt-2 border-t border-border/60">
-                    <div class="flex items-center gap-1.5 mb-2">${icon('activity', 'w-3.5 h-3.5 text-primary')}<span class="text-[11px] text-muted-foreground font-medium">技术面解读</span></div>
-                    <div class="space-y-1.5">
-                      ${analysis.techViews.map(v => `
-                        <div class="flex items-start gap-2">
-                          <span class="text-${v.positive === true ? 'rise' : v.positive === false ? 'fall' : 'muted-foreground'} text-xs mt-0.5 font-bold">•</span>
-                          <span class="text-[11px] text-foreground">${esc(v.text)}</span>
-                        </div>
-                      `).join('')}
-                    </div>
+                </div>
+                
+                <!-- 跌幅居前板块 -->
+                <div class="bg-card rounded-xl p-4 shadow-soft">
+                  <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-bold text-foreground">跌幅居前</h3>
+                    <span class="text-[10px] text-muted-foreground">按跌幅排序</span>
                   </div>
-                  ` : ''}
-                </div>
-              </div>
-              ` : ''}
-
-              <div class="grid grid-cols-2 gap-3">
-                ${metals.map(m => {
-                  const rise = m.changePercent >= 0;
-                  return `
-                    <div class="relative rounded-xl p-4 overflow-hidden" style="background: linear-gradient(135deg, hsl(43 96% 62%), hsl(43 96% 50%))">
-                      <div class="text-white/80 text-xs mb-1">${esc(m.name)}</div>
-                      <div class="text-white text-xl font-bold font-din">${m.price ? m.price.toFixed(2) : '--'}</div>
-                      <div class="text-white/90 text-xs mt-1 font-medium">${m.price ? (rise ? '+' : '') + m.changePercent.toFixed(2) + '%' : '--'}</div>
-                      <div class="text-white/60 text-xs mt-0.5">美元/盎司</div>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
-
-              ${copper ? `
-              <div class="bg-card rounded-xl p-5 shadow-soft">
-                <h3 class="text-sm font-semibold text-foreground mb-4">工业金属</h3>
-                <div class="space-y-3">
-                  ${[copper].map(m => {
-                    const rise = m.changePercent >= 0;
-                    return `
-                      <div class="flex items-center justify-between">
-                        <div><span class="text-sm text-foreground font-medium">${esc(m.name)}</span><span class="text-xs text-muted-foreground ml-2">$${m.price.toFixed(4)}</span></div>
-                        <span class="text-sm font-semibold font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${m.changePercent.toFixed(2)}%</span>
+                  <div class="space-y-2.5">
+                    ${aShare.topLosers.map((s, i) => `
+                      <div class="flex items-center gap-3">
+                        <span class="w-5 text-xs font-bold text-fall text-center">${i + 1}</span>
+                        <div class="flex-1 min-w-0">
+                          <div class="text-sm font-medium text-foreground">${esc(s.name)}</div>
+                          <div class="text-[10px] text-muted-foreground">主力流出 ${s.netOutflow}亿</div>
+                        </div>
+                        <div class="text-right">
+                          <div class="text-sm font-bold font-din text-fall">${s.change}%</div>
+                        </div>
                       </div>
-                    `;
-                  }).join('')}
+                    `).join('')}
+                  </div>
                 </div>
-              </div>
-              ` : ''}
+                
+                <!-- 资金流向 -->
+                <div class="bg-card rounded-xl p-4 shadow-soft">
+                  <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-bold text-foreground">主力资金流向</h3>
+                    <span class="text-[10px] text-muted-foreground">净流入TOP5</span>
+                  </div>
+                  <div class="space-y-2.5">
+                    ${aShare.topInflow.map((s, i) => {
+                      const pct = (s.netInflow / aShare.topInflow[0].netInflow * 100).toFixed(0);
+                      return `
+                        <div>
+                          <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs text-foreground">${esc(s.name)}</span>
+                            <span class="text-xs font-din text-rise">+${s.netInflow}亿</span>
+                          </div>
+                          <div class="h-1.5 bg-accent rounded-full overflow-hidden">
+                            <div class="h-full bg-rise rounded-full" style="width:${pct}%"></div>
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+                
+                <!-- 后续趋势解读 -->
+                <div class="bg-card rounded-xl p-4 shadow-soft">
+                  <div class="flex items-center gap-2 mb-3">
+                    <div class="w-6 h-6 rounded-lg bg-hot/15 flex items-center justify-center text-hot">${icon('trending-up', 'w-3.5 h-3.5')}</div>
+                    <span class="text-sm font-bold text-foreground">后续趋势解读</span>
+                  </div>
+                  <div class="space-y-2">
+                    ${aShare.trendOutlook.map(t => `
+                      <div class="flex items-start gap-2">
+                        <span class="text-hot text-xs mt-0.5 font-bold">•</span>
+                        <span class="text-[11px] text-foreground leading-relaxed">${esc(t)}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+                ` : `
+                <div class="bg-card rounded-xl p-8 text-center">
+                  <div class="text-muted-foreground text-sm">暂无A股收盘数据</div>
+                </div>
+                `}
+              ` : `
+                <!-- 美股收盘总结 -->
+                ${us ? `
+                <!-- 三大指数 -->
+                <div class="bg-card rounded-xl p-4 shadow-soft">
+                  <div class="flex items-center gap-2 mb-3">
+                    <span class="text-xs font-bold ${us.marketSentiment === '偏强' ? 'text-rise' : 'text-muted-foreground'}">${us.marketSentiment}</span>
+                    <span class="text-[10px] text-muted-foreground ml-auto">美股收盘</span>
+                  </div>
+                  <div class="grid grid-cols-3 gap-3">
+                    ${us.indices.map(idx => {
+                      const rise = parseFloat(idx.change) >= 0;
+                      return `
+                        <div class="text-center">
+                          <div class="text-[11px] text-muted-foreground mb-1">${esc(idx.name)}</div>
+                          <div class="text-base font-bold font-din ${rise ? 'text-rise' : 'text-fall'}">${idx.level?.toFixed(0) || '--'}</div>
+                          <div class="text-[11px] font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${idx.change}%</div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+                
+                <!-- AI分析总结 -->
+                <div class="bg-card rounded-xl p-4 shadow-soft">
+                  <div class="flex items-center gap-2 mb-2">
+                    <div class="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center text-primary">${icon('zap', 'w-3.5 h-3.5')}</div>
+                    <span class="text-sm font-bold text-foreground">AI 收盘分析</span>
+                  </div>
+                  <p class="text-[12px] text-foreground leading-relaxed">${esc(us.summary)}</p>
+                </div>
+                
+                <!-- 热门板块 -->
+                <div class="bg-card rounded-xl p-4 shadow-soft">
+                  <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-bold text-foreground">热门板块表现</h3>
+                    <span class="text-[10px] text-muted-foreground">按涨跌幅</span>
+                  </div>
+                  <div class="space-y-2.5">
+                    ${[...us.sectors].sort((a, b) => parseFloat(b.change) - parseFloat(a.change)).map((s, i) => {
+                      const rise = parseFloat(s.change) >= 0;
+                      return `
+                        <div class="flex items-center gap-3">
+                          <span class="w-5 text-xs font-bold ${rise ? 'text-rise' : 'text-fall'} text-center">${i + 1}</span>
+                          <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium text-foreground">${esc(s.name)}</div>
+                          </div>
+                          <div class="text-right">
+                            <div class="text-sm font-bold font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${s.change}%</div>
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+                ` : `
+                <div class="bg-card rounded-xl p-8 text-center">
+                  <div class="text-muted-foreground text-sm">暂无美股收盘数据</div>
+                </div>
+                `}
+              `}
             </div>
           </div>
         </div>
@@ -781,7 +999,7 @@
       const tabs = [
         { key: 'overview', label: '概览', icon: 'home' },
         { key: 'us', label: '国际', icon: 'globe' },
-        { key: 'metals', label: '贵金属', icon: 'gem' },
+        { key: 'metals', label: '收盘', icon: 'bar-chart-2' },
         { key: 'news', label: '资讯', icon: 'newspaper' },
         { key: 'concepts', label: '概念', icon: 'lightbulb' },
       ];
@@ -884,6 +1102,11 @@
 
     function setNewsTab(tab) {
       state.newsTab = tab;
+      render();
+    }
+
+    function setCloseTab(tab) {
+      state.closeTab = tab;
       render();
     }
 
