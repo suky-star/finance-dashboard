@@ -164,7 +164,7 @@ const TDX_TOKEN = process.env.TDX_TOKEN || '';
 const TDX_SECTOR_CODES = [
   { code: '880654', name: 'AI/人工智能', setcode: '1' },
   { code: '880521', name: '贵金属', setcode: '1' },
-  { code: '880667', name: '数据要素', setcode: '1' },
+  { code: '880667', name: '数字经济', setcode: '1' },
   { code: '000819', name: '有色金属', setcode: '1' },
   { code: '881394', name: '金融/券商', setcode: '1' },
   { code: '881211', name: '汽车/整车', setcode: '1' },
@@ -575,35 +575,42 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent, tdx) {
   const gainMap = tdx?.sectorGains || {};
   const realGain = c => gainMap[c.name] !== undefined ? gainMap[c.name] : null;
 
-  // 涨幅居前板块（真实板块涨跌幅优先，按涨幅降序）
-  const topGainers = concepts
-    .filter(c => c.sentiment !== '看空' && isAShareSector(c))
-    .map((c, i) => {
-      const g = realGain(c);
-      return {
-        name: c.name,
-        change: g !== null ? g.toFixed(2) : (1.5 + i * 0.3 + c.score * 0.1).toFixed(2),
-        netInflow: (5 + Math.random() * 15).toFixed(2),
-        leaders: c.leaders.slice(0, 3),
-      };
-    })
-    .sort((a, b) => parseFloat(b.change) - parseFloat(a.change))
-    .slice(0, 5);
+  // 每个板块统一涨跌幅（真实优先，模拟兜底），保证涨幅/跌幅榜数值一致
+  const sectorChange = (c, i) => {
+    const g = realGain(c);
+    return g !== null ? g : (c.score * 0.4 - 1.2 + i * 0.1);
+  };
+  const allSectorChanges = concepts
+    .filter(isAShareSector)
+    .map((c, i) => ({
+      name: c.name,
+      change: sectorChange(c, i),
+      leaders: c.leaders.slice(0, 3),
+    }));
 
-  // 跌幅居前板块（真实板块涨跌幅优先，按跌幅降序）
-  const topLosers = concepts
-    .filter(c => c.sentiment !== '看多' && isAShareSector(c))
-    .map((c, i) => {
-      const g = realGain(c);
-      return {
-        name: c.name,
-        change: g !== null ? g.toFixed(2) : (-1.2 - i * 0.25).toFixed(2),
-        netOutflow: (3 + Math.random() * 10).toFixed(2),
-        leaders: c.leaders.slice(0, 3),
-      };
-    })
-    .sort((a, b) => parseFloat(a.change) - parseFloat(b.change))
-    .slice(0, 5);
+  // 涨幅居前（仅正涨幅，按涨幅降序）
+  const topGainers = allSectorChanges
+    .filter(s => s.change > 0)
+    .sort((a, b) => b.change - a.change)
+    .slice(0, 5)
+    .map(s => ({
+      name: s.name,
+      change: s.change.toFixed(2),
+      netInflow: (5 + Math.random() * 15).toFixed(2),
+      leaders: s.leaders,
+    }));
+
+  // 跌幅居前（仅负涨幅，按跌幅降序）
+  const topLosers = allSectorChanges
+    .filter(s => s.change < 0)
+    .sort((a, b) => a.change - b.change)
+    .slice(0, 5)
+    .map(s => ({
+      name: s.name,
+      change: s.change.toFixed(2),
+      netOutflow: (3 + Math.random() * 10).toFixed(2),
+      leaders: s.leaders,
+    }));
 
   // 主力净流入（真实个股资金数据优先，否则用板块热度模拟）
   const topInflow = tdx?.inflowStocks?.length
@@ -622,19 +629,16 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent, tdx) {
         change: (0.8 + i * 0.2).toFixed(2),
       }));
 
-  // 主力净流出板块（真实板块负涨幅优先，否则用板块热度模拟）
-  const topOutflow = concepts
-    .filter(isAShareSector)
-    .map((c, i) => {
-      const g = realGain(c);
-      return {
-        name: c.name,
-        netOutflow: g !== null && g < 0 ? Math.abs(g * 3).toFixed(2) : (15 - i * 2 + Math.random() * 3).toFixed(2),
-        change: g !== null ? g.toFixed(2) : (-0.6 - i * 0.15).toFixed(2),
-      };
-    })
-    .sort((a, b) => parseFloat(a.change) - parseFloat(b.change))
-    .slice(0, 5);
+  // 主力净流出板块（仅负涨幅板块，按跌幅降序）
+  const topOutflow = allSectorChanges
+    .filter(s => s.change < 0)
+    .sort((a, b) => a.change - b.change)
+    .slice(0, 5)
+    .map(s => ({
+      name: s.name,
+      netOutflow: Math.abs(s.change * 3).toFixed(2),
+      change: s.change.toFixed(2),
+    }));
   
   // A股AI分析总结
   const aShareSummary = marketSentiment === '偏强' 
@@ -722,7 +726,7 @@ function generateConceptAnalysis(news) {
     '机器人': ['机器人', '人形机器人', '自动化', '智能制造'],
     '汽车/整车': ['汽车', '整车', '乘用车', '销量', '车展'],
     '军工/国防': ['军工', '国防', '军品', '航天', '航空', '导弹'],
-    '数据要素': ['数据', '数据要素', '数据资产', '数字经济', '信创'],
+    '数字经济': ['数据', '数据要素', '数据资产', '数字经济', '信创'],
     '中特估/国企': ['中特估', '国企改革', '央企', '估值重塑'],
   };
   
@@ -812,10 +816,10 @@ function generateConceptAnalysis(news) {
       neutral: '军工板块业绩确定性强，估值处于合理区间，关注订单落地',
       logic: '核心逻辑：国防预算→订单释放→业绩兑现→板块行情',
     },
-    '数据要素': {
-      bullish: '数据要素政策持续落地，数据资产化加速推进',
+    '数字经济': {
+      bullish: '数字经济政策持续落地，数据资产化加速推进',
       bearish: '商业模式仍在探索，业绩兑现尚需时日',
-      neutral: '数据要素政策催化不断，关注数据运营和信创龙头',
+      neutral: '数字经济政策催化不断，关注数据运营和信创龙头',
       logic: '核心逻辑：政策推动→数据资产化→运营平台价值重估',
     },
     '中特估/国企': {
@@ -962,7 +966,7 @@ function generateConceptAnalysis(news) {
       { name: '中国船舶', code: '600150', region: 'cn' },
       { name: '光威复材', code: '300699', region: 'cn' },
     ],
-    '数据要素': [
+    '数字经济': [
       { name: '浪潮信息', code: '000977', region: 'cn' },
       { name: '中科曙光', code: '603019', region: 'cn' },
       { name: '易华录', code: '300212', region: 'cn' },
@@ -1416,9 +1420,9 @@ function enrichNewsWithSummaryAndStocks(news) {
         { name: '诚迈科技', code: '300598', weight: 6, reason: '统信系统' },
       ]
     },
-    '数据要素': {
+    '数字经济': {
       weight: 7,
-      impact: '数据要素是数字经济核心生产资料',
+      impact: '数字经济以数据要素为核心生产资料，政策驱动产业数字化加速',
       stocks: [
         { name: '浪潮信息', code: '000977', weight: 7, reason: '数据基础设施' },
         { name: '中科曙光', code: '603019', weight: 7, reason: '算力基础设施' },
