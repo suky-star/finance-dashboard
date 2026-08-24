@@ -169,6 +169,24 @@
           if (data && data.source === '金十数据') {
             state.dynamicData = data;
             state.newsData = data;
+            // 用通达信真实数据填充概况页
+            const mc = data.analysis?.marketClose?.aShare;
+            if (mc && mc.indices && mc.indices.length > 0) {
+              state.aShare = {
+                indices: mc.indices.map(i => ({
+                  name: i.name,
+                  price: i.level,
+                  changePercent: i.change,
+                })),
+                stats: {
+                  upCount: mc.upCount,
+                  downCount: mc.downCount,
+                  limitUpCount: mc.limitUp,
+                  limitDownCount: mc.limitDown,
+                  totalTurnover: mc.turnover ? (mc.turnover / 10000).toFixed(2) + '万亿' : '--',
+                },
+              };
+            }
             state.newsLoading = false;
             return true;
           }
@@ -1054,9 +1072,16 @@
           { name: '创业板指', ...results[MARKET_CODES.aShare.chinext] },
         ].filter(i => i.price);
         if (aIndices.length > 0) {
+          const mc = state.dynamicData?.analysis?.marketClose?.aShare;
           state.aShare = {
             indices: aIndices,
-            stats: {
+            stats: mc ? {
+              upCount: mc.upCount,
+              downCount: mc.downCount,
+              limitUpCount: mc.limitUp,
+              limitDownCount: mc.limitDown,
+              totalTurnover: mc.turnover ? (mc.turnover / 10000).toFixed(2) + '万亿' : '--',
+            } : {
               upCount: 2800 + Math.floor(Math.random() * 300),
               downCount: 2200 + Math.floor(Math.random() * 300),
               limitUpCount: 40 + Math.floor(Math.random() * 20),
