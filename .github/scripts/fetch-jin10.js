@@ -737,7 +737,10 @@ function generateConceptAnalysis(news) {
     }
   }
   
+  // 宏观主题不作为A股概念板块展示
+  const MACRO_THEMES = ['美联储/降息', '地缘政治'];
   const hotConcepts = Object.values(conceptMap)
+    .filter(c => !MACRO_THEMES.includes(c.name))
     .sort((a, b) => b.score - a.score)
     .slice(0, 15);
   
