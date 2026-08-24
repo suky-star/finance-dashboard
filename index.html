@@ -631,15 +631,37 @@
               
               ${newsTabActive ? `
                 <div class="space-y-3">
-                  ${newsList.length > 0 ? newsList.map(item => `
+                  ${newsList.length > 0 ? newsList.map(item => {
+                    const tagColor = item.aiTag === '利好' ? 'bg-rise/10 text-rise' : item.aiTag === '利空' ? 'bg-fall/10 text-fall' : 'bg-muted-foreground/10 text-muted-foreground';
+                    return `
                     <div class="bg-card rounded-xl p-4 shadow-soft">
-                      <h3 class="text-sm font-semibold text-foreground leading-snug mb-2">${esc(item.title)}</h3>
-                      ${item.summary ? `<p class="text-[11px] text-muted-foreground leading-relaxed mb-3 line-clamp-2">${esc(item.summary)}</p>` : ''}
-                      ${item.relatedStocks && item.relatedStocks.length > 0 ? `
-                        <div class="flex flex-wrap gap-1.5 mb-3">
-                          ${item.relatedStocks.map(s => `
-                            <span class="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-md font-medium">${esc(s.name)} · ${esc(s.code)}</span>
+                      <div class="flex items-start gap-2 mb-2">
+                        ${item.aiTag ? `<span class="flex-shrink-0 text-[10px] px-1.5 py-0.5 ${tagColor} rounded font-bold">${esc(item.aiTag)}</span>` : ''}
+                        <h3 class="text-sm font-semibold text-foreground leading-snug flex-1">${esc(item.title)}</h3>
+                      </div>
+                      ${item.summary ? `<p class="text-[11px] text-muted-foreground leading-relaxed mb-3">${esc(item.summary)}</p>` : ''}
+                      ${item.matchedTopics && item.matchedTopics.length > 0 ? `
+                        <div class="flex flex-wrap gap-1 mb-3">
+                          ${item.matchedTopics.map(t => `
+                            <span class="text-[10px] px-1.5 py-0.5 bg-accent text-muted-foreground rounded">#${esc(t)}</span>
                           `).join('')}
+                        </div>
+                      ` : ''}
+                      ${item.relatedStocks && item.relatedStocks.length > 0 ? `
+                        <div class="mb-3">
+                          <div class="text-[10px] text-muted-foreground mb-1.5">高度相关个股</div>
+                          <div class="flex flex-wrap gap-1.5">
+                            ${item.relatedStocks.map(s => {
+                              const relColor = s.relevance === '极高' ? 'bg-rise/10 text-rise' : s.relevance === '高' ? 'bg-hot/10 text-hot' : 'bg-primary/10 text-primary';
+                              return `
+                                <div class="flex items-center gap-1 text-[10px] px-2 py-1 ${relColor} rounded-md">
+                                  <span class="font-medium">${esc(s.name)}</span>
+                                  <span class="opacity-60">· ${esc(s.code)}</span>
+                                  <span class="opacity-80 ml-0.5">${esc(s.relevance)}</span>
+                                </div>
+                              `;
+                            }).join('')}
+                          </div>
                         </div>
                       ` : ''}
                       <div class="flex items-center gap-2">
@@ -647,7 +669,7 @@
                         ${item.url ? `<a href="${esc(item.url)}" target="_blank" class="text-xs text-primary ml-auto">查看原文 →</a>` : ''}
                       </div>
                     </div>
-                  `).join('') : `
+                  `}).join('') : `
                     <div class="bg-card rounded-xl p-8 text-center">
                       <div class="text-muted-foreground text-sm">暂无资讯数据</div>
                     </div>
