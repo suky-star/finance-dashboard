@@ -722,6 +722,7 @@
                 ${displayConcepts.map(c => {
                   const isUp = c.trend === 'up';
                   const cnLeaders = (c.leaders || []).filter(l => l.region === 'cn');
+                  const sentColor = c.sentiment === '看多' ? 'bg-rise/10 text-rise' : c.sentiment === '看空' ? 'bg-fall/10 text-fall' : 'bg-muted-foreground/10 text-muted-foreground';
                   return `
                     <div class="bg-card rounded-xl p-4 shadow-soft">
                       <div class="flex items-center justify-between mb-3">
@@ -731,6 +732,7 @@
                             <div class="flex items-center gap-2">
                               <span class="text-sm font-bold text-foreground">${esc(c.name)}</span>
                               ${c.rank <= 3 ? '<span class="text-[9px] px-1.5 py-0.5 bg-hot/15 text-hot rounded font-bold">HOT</span>' : ''}
+                              ${c.sentiment ? `<span class="text-[9px] px-1.5 py-0.5 ${sentColor} rounded font-bold">${esc(c.sentiment)}</span>` : ''}
                             </div>
                             <div class="text-[10px] text-muted-foreground mt-0.5">热度指数 ${c.score}</div>
                           </div>
@@ -739,6 +741,14 @@
                           ${isUp ? '↑ 升温' : c.trend === 'down' ? '↓ 降温' : '→ 持平'}
                         </span>
                       </div>
+                      ${c.aiSummary ? `
+                      <div class="mb-3 p-2.5 bg-accent/40 rounded-lg">
+                        <div class="flex items-start gap-1.5">
+                          <span class="text-[10px] text-primary font-bold shrink-0 mt-0.5">AI分析</span>
+                          <p class="text-[11px] text-foreground leading-relaxed">${esc(c.aiSummary)}</p>
+                        </div>
+                      </div>
+                      ` : ''}
                       ${cnLeaders.length > 0 ? `
                       <div class="pt-3 border-t border-border/60">
                         <div class="text-[11px] text-muted-foreground mb-2">A股龙头</div>
