@@ -696,18 +696,21 @@
                     <span class="text-[10px] text-muted-foreground">按涨幅排序</span>
                   </div>
                   <div class="space-y-2.5">
-                    ${aShare.topGainers.map((s, i) => `
+                    ${aShare.topGainers.map((s, i) => {
+                      const flow = parseFloat(s.netInflow) || 0;
+                      const flowLabel = flow >= 0 ? '主力净流入' : '主力净流出';
+                      return `
                       <div class="flex items-center gap-3">
                         <span class="w-5 text-xs font-bold text-rise text-center">${i + 1}</span>
                         <div class="flex-1 min-w-0">
                           <div class="text-sm font-medium text-foreground">${esc(s.name)}</div>
-                          <div class="text-[10px] text-muted-foreground">主力流入 ${s.netInflow}亿</div>
+                          <div class="text-[10px] text-muted-foreground">${flowLabel} ${Math.abs(flow).toFixed(2)}亿</div>
                         </div>
                         <div class="text-right">
                           <div class="text-sm font-bold font-din text-rise">+${s.change}%</div>
                         </div>
                       </div>
-                    `).join('')}
+                    `}).join('')}
                   </div>
                 </div>
                 

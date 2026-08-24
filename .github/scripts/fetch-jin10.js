@@ -165,10 +165,17 @@ const TDX_SECTOR_CODES = [
   { code: '880654', name: 'AI/人工智能', setcode: '1' },
   { code: '880521', name: '贵金属', setcode: '1' },
   { code: '880667', name: '数字经济', setcode: '1' },
-  { code: '000819', name: '有色金属', setcode: '1' },
+  { code: '880324', name: '有色金属', setcode: '1' },
   { code: '881394', name: '金融/券商', setcode: '1' },
   { code: '881211', name: '汽车/整车', setcode: '1' },
   { code: '399808', name: '新能源', setcode: '0' },
+  { code: '880310', name: '原油/能源', setcode: '1' },
+  { code: '880305', name: '电力', setcode: '1' },
+  { code: '880400', name: '医药', setcode: '1' },
+  { code: '880471', name: '银行', setcode: '1' },
+  { code: '880474', name: '多元金融', setcode: '1' },
+  { code: '880477', name: '建筑工程', setcode: '1' },
+  { code: '880534', name: '锂电池', setcode: '1' },
 ];
 
 function tdxPost(body, sessionId) {
@@ -219,7 +226,7 @@ async function tdxCall(session, name, args) {
 
 // 获取通达信真实数据：涨停/跌停家数、板块涨跌幅、主力资金流向
 async function fetchTdxData() {
-  const result = { available: false, limitUp: null, limitDown: null, sectorGains: {}, inflowStocks: [] };
+  const result = { available: false, limitUp: null, limitDown: null, sectorGains: {}, sectorFlows: {}, inflowStocks: [] };
   if (!TDX_TOKEN) {
     console.log('  ⚠ 未配置 TDX_TOKEN，跳过通达信数据');
     return result;
@@ -241,20 +248,43 @@ async function fetchTdxData() {
     result.limitDown = limitDownRes.meta?.total ?? null;
     console.log(`  ✓ 涨停 ${result.limitUp} 家 / 跌停 ${result.limitDown} 家`);
 
-    // 3. 板块涨跌幅（真实行情）
+    // 3. 板块涨跌幅 + 主力资金流（真实行情：StatInfo.Mainlx 为板块级主力净流入，单位元）
     for (const s of TDX_SECTOR_CODES) {
       try {
-        const r = await tdxCall(session, 'tdx_quotes', { code: s.code, setcode: s.setcode, hasHQInfo: '1' });
+        const r = await tdxCall(session, 'tdx_quotes', { code: s.code, setcode: s.setcode, hasHQInfo: '1', hasStatInfo: '1' });
         const hq = r.HQInfo || {};
         const now = hq.Now, close = hq.Close;
         if (now && close) {
           result.sectorGains[s.name] = ((now - close) / close * 100);
         }
+        const mainlx = r.StatInfo?.Mainlx;
+        if (mainlx !== undefined) {
+          result.sectorFlows[s.name] = mainlx / 1e8; // 元 → 亿（带正负号）
+        }
       } catch (e) {}
     }
     console.log(`  ✓ 获取 ${Object.keys(result.sectorGains).length} 个板块真实行情`);
 
-    // 4. 主力净流入个股（真实资金数据）
+    // 4. 板块主力资金流补充：Mainlx 缺失的板块（如新能源指数）用个股累加兜底
+    for (const s of TDX_SECTOR_CODES) {
+      if (result.sectorFlows[s.name] !== undefined) continue;
+      try {
+        const gain = result.sectorGains[s.name];
+        if (gain === undefined) continue;
+        const isOutflow = gain < 0;
+        const query = isOutflow ? `${s.name}板块主力净流出` : `${s.name}板块主力净流入`;
+        const r = await tdxCall(session, 'tdx_screener', { message: query, pageSize: '5' });
+        const flow = (r.data || []).reduce((acc, d) => {
+          const k = Object.keys(d).find(x => x.includes('主力净额'));
+          if (!k) return acc;
+          return acc + Math.abs(d[k]) / 1e8;
+        }, 0);
+        result.sectorFlows[s.name] = isOutflow ? -flow : flow;
+      } catch (e) {}
+    }
+    console.log(`  ✓ 获取 ${Object.keys(result.sectorFlows).length} 个板块主力资金流`);
+
+    // 5. 主力净流入个股（真实资金数据）
     const inflowRes = await tdxCall(session, 'tdx_screener', { message: '主力净流入', pageSize: '20' });
     result.inflowStocks = (inflowRes.data || []).map(d => {
       const amountKey = Object.keys(d).find(k => k.includes('主力净额'));
@@ -588,29 +618,53 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent, tdx) {
       leaders: c.leaders.slice(0, 3),
     }));
 
-  // 涨幅居前（仅正涨幅，按涨幅降序）
-  const topGainers = allSectorChanges
-    .filter(s => s.change > 0)
-    .sort((a, b) => b.change - a.change)
-    .slice(0, 5)
-    .map(s => ({
-      name: s.name,
-      change: s.change.toFixed(2),
-      netInflow: (5 + Math.random() * 15).toFixed(2),
-      leaders: s.leaders,
-    }));
-
-  // 跌幅居前（仅负涨幅，按跌幅降序）
-  const topLosers = allSectorChanges
-    .filter(s => s.change < 0)
-    .sort((a, b) => a.change - b.change)
-    .slice(0, 5)
-    .map(s => ({
-      name: s.name,
-      change: s.change.toFixed(2),
-      netOutflow: (3 + Math.random() * 10).toFixed(2),
-      leaders: s.leaders,
-    }));
+  // 涨幅居前 / 跌幅居前：优先使用通达信真实板块数据（14个板块，保证各至少5个）
+  const tdxSectorNames = Object.keys(gainMap);
+  let topGainers, topLosers;
+  if (tdxSectorNames.length >= 10) {
+    const sectorList = tdxSectorNames.map(name => ({ name, change: gainMap[name] }));
+    topGainers = sectorList
+      .filter(s => s.change > 0)
+      .sort((a, b) => b.change - a.change)
+      .slice(0, 5)
+      .map(s => ({
+        name: s.name,
+        change: s.change.toFixed(2),
+        netInflow: (tdx?.sectorFlows?.[s.name] ?? 0).toFixed(2),
+        leaders: [],
+      }));
+    topLosers = sectorList
+      .filter(s => s.change < 0)
+      .sort((a, b) => a.change - b.change)
+      .slice(0, 5)
+      .map(s => ({
+        name: s.name,
+        change: s.change.toFixed(2),
+        netOutflow: Math.abs(tdx?.sectorFlows?.[s.name] ?? 0).toFixed(2),
+        leaders: [],
+      }));
+  } else {
+    topGainers = allSectorChanges
+      .filter(s => s.change > 0)
+      .sort((a, b) => b.change - a.change)
+      .slice(0, 5)
+      .map(s => ({
+        name: s.name,
+        change: s.change.toFixed(2),
+        netInflow: (5 + Math.random() * 15).toFixed(2),
+        leaders: s.leaders,
+      }));
+    topLosers = allSectorChanges
+      .filter(s => s.change < 0)
+      .sort((a, b) => a.change - b.change)
+      .slice(0, 5)
+      .map(s => ({
+        name: s.name,
+        change: s.change.toFixed(2),
+        netOutflow: (3 + Math.random() * 10).toFixed(2),
+        leaders: s.leaders,
+      }));
+  }
 
   // 主力净流入（真实个股资金数据优先，否则用板块热度模拟）
   const topInflow = tdx?.inflowStocks?.length
