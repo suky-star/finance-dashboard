@@ -178,6 +178,12 @@ const TDX_SECTOR_CODES = [
   { code: '880534', name: '锂电池', setcode: '1' },
 ];
 
+// 通达信只在计划时间（北京时间 7/12/16/20 点）调用，其余时间跳过
+function isScheduledTime() {
+  const beijingHour = (new Date().getUTCHours() + 8) % 24;
+  return [7, 12, 16, 20].includes(beijingHour);
+}
+
 function tdxPost(body, sessionId) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
@@ -229,6 +235,10 @@ async function fetchTdxData() {
   const result = { available: false, limitUp: null, limitDown: null, sectorGains: {}, sectorFlows: {}, inflowStocks: [] };
   if (!TDX_TOKEN) {
     console.log('  ⚠ 未配置 TDX_TOKEN，跳过通达信数据');
+    return result;
+  }
+  if (!isScheduledTime()) {
+    console.log('  ⚠ 非计划时间，跳过通达信数据调用');
     return result;
   }
   try {
