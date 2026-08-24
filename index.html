@@ -62,6 +62,12 @@
       'bar-chart-3': '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>',
       'clock': '<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
       'minus': '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+      'globe': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+      'droplet': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>',
+      'activity': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+      'trending-up': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
+      'dollar-sign': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+      'zinc': '<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
     };
 
     const icon = (name, className = '') => {
@@ -466,12 +472,38 @@
       `;
     }
 
+    // 品种图标映射
+    const quoteIconMap = {
+      'XAUUSD': 'gem',
+      '现货黄金': 'gem',
+      'XAGUSD': 'gem',
+      '现货白银': 'gem',
+      'USOIL': 'droplet',
+      'WTI原油': 'droplet',
+      'UKOIL': 'droplet',
+      '布伦特原油': 'droplet',
+      'COPPER': 'zinc',
+      '现货铜': 'zinc',
+      'USDJPY': 'dollar-sign',
+      '美元/日元': 'dollar-sign',
+      'EURUSD': 'dollar-sign',
+      '欧元/美元': 'dollar-sign',
+      'USDCNH': 'dollar-sign',
+      '美元/人民币': 'dollar-sign',
+    };
+
     function renderQuoteCard(item) {
       const rise = item.changePercent >= 0;
+      const iconName = quoteIconMap[item.code] || quoteIconMap[item.name] || 'trending-up';
       return `
         <div class="bg-card rounded-xl p-4 shadow-soft relative overflow-hidden">
           <div class="absolute bottom-0 left-0 right-0 h-1 ${rise ? 'bg-rise' : 'bg-fall'}"></div>
-          <div class="text-[11px] text-muted-foreground mb-1">${esc(item.name)}</div>
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-8 h-8 rounded-lg bg-${rise ? 'rise' : 'fall'}/10 flex items-center justify-center ${rise ? 'text-rise' : 'text-fall'}">
+              ${icon(iconName, 'w-4 h-4')}
+            </div>
+            <div class="text-[11px] text-muted-foreground">${esc(item.name)}</div>
+          </div>
           <div class="text-xl font-bold font-din text-foreground mb-1">${item.price.toFixed(2)}</div>
           <div class="flex items-center gap-1">
             <span class="text-sm font-semibold font-din ${rise ? 'text-rise' : 'text-fall'}">${rise ? '+' : ''}${item.changePercent.toFixed(2)}%</span>
@@ -602,7 +634,14 @@
                   ${newsList.length > 0 ? newsList.map(item => `
                     <div class="bg-card rounded-xl p-4 shadow-soft">
                       <h3 class="text-sm font-semibold text-foreground leading-snug mb-2">${esc(item.title)}</h3>
-                      ${item.intro ? `<p class="text-[11px] text-muted-foreground leading-relaxed mb-3 line-clamp-2">${esc(item.intro)}</p>` : ''}
+                      ${item.summary ? `<p class="text-[11px] text-muted-foreground leading-relaxed mb-3 line-clamp-2">${esc(item.summary)}</p>` : ''}
+                      ${item.relatedStocks && item.relatedStocks.length > 0 ? `
+                        <div class="flex flex-wrap gap-1.5 mb-3">
+                          ${item.relatedStocks.map(s => `
+                            <span class="text-[10px] px-2 py-1 bg-primary/10 text-primary rounded-md font-medium">${esc(s.name)} · ${esc(s.code)}</span>
+                          `).join('')}
+                        </div>
+                      ` : ''}
                       <div class="flex items-center gap-2">
                         <span class="text-xs text-muted-foreground">${esc(item.time || '')}</span>
                         ${item.url ? `<a href="${esc(item.url)}" target="_blank" class="text-xs text-primary ml-auto">查看原文 →</a>` : ''}
@@ -641,6 +680,10 @@
 
     function renderConceptsPage() {
       const concepts = state.dynamicData?.analysis?.concepts || [];
+      // 只展示有A股龙头的概念，按热度排序
+      const aShareConcepts = concepts.filter(c => c.leaders && c.leaders.some(l => l.region === 'cn'));
+      const displayConcepts = aShareConcepts.length > 0 ? aShareConcepts : concepts;
+      
       return `
         <div class="page ${state.activeTab === 'concepts' ? 'active' : ''}" id="page-concepts">
           <div class="min-h-screen bg-background safe-bottom">
@@ -650,12 +693,13 @@
                   ${icon('lightbulb', 'w-5 h-5 text-hot')}
                   <h1 class="text-xl font-bold text-foreground">热门概念</h1>
                 </div>
-                <span class="text-xs text-muted-foreground">基于新闻热度</span>
+                <span class="text-xs text-muted-foreground">${displayConcepts.length}个板块 · 按热度排序</span>
               </div>
-              ${concepts.length > 0 ? `
+              ${displayConcepts.length > 0 ? `
               <div class="space-y-3">
-                ${concepts.map(c => {
+                ${displayConcepts.map(c => {
                   const isUp = c.trend === 'up';
+                  const cnLeaders = (c.leaders || []).filter(l => l.region === 'cn');
                   return `
                     <div class="bg-card rounded-xl p-4 shadow-soft">
                       <div class="flex items-center justify-between mb-3">
@@ -673,14 +717,14 @@
                           ${isUp ? '↑ 升温' : c.trend === 'down' ? '↓ 降温' : '→ 持平'}
                         </span>
                       </div>
-                      ${c.leaders && c.leaders.length > 0 ? `
+                      ${cnLeaders.length > 0 ? `
                       <div class="pt-3 border-t border-border/60">
-                        <div class="text-[11px] text-muted-foreground mb-2">龙头标的</div>
+                        <div class="text-[11px] text-muted-foreground mb-2">A股龙头</div>
                         <div class="flex gap-2">
-                          ${c.leaders.slice(0, 3).map(s => `
+                          ${cnLeaders.slice(0, 4).map(s => `
                             <div class="flex-1 bg-accent/60 rounded-lg p-2">
                               <div class="text-xs font-medium text-foreground truncate">${esc(s.name)}</div>
-                              <div class="text-[10px] text-muted-foreground font-din mt-0.5">${esc(s.code)} · ${s.region === 'us' ? '美股' : 'A股'}</div>
+                              <div class="text-[10px] text-muted-foreground font-din mt-0.5">${esc(s.code)}</div>
                             </div>
                           `).join('')}
                         </div>
