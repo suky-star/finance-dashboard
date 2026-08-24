@@ -438,6 +438,10 @@ function generateTechnicalAnalysis(quote) {
 // ============= 收盘总结生成 =============
 
 function generateMarketCloseSummary(concepts, news, quotes, tencent) {
+  // 宏观主题不作为A股板块展示
+  const MACRO_THEMES = ['美联储/降息', '地缘政治'];
+  const isAShareSector = c => !MACRO_THEMES.includes(c.name);
+
   // A股主要指数（金十MCP真实数据）
   const bullCount = concepts.filter(c => c.sentiment === '看多').length;
   const bearCount = concepts.filter(c => c.sentiment === '看空').length;
@@ -454,32 +458,33 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent) {
     { name: '创业板指', code: '399006', change: quotes['399006']?.changePercent ?? 0, points: quotes['399006']?.change ?? 0, level: quotes['399006']?.price ?? 0 },
   ];
   
-  // 涨幅居前板块（取热度最高且偏多的概念）
-  const topGainers = [...concepts]
-    .filter(c => c.sentiment !== '看空')
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5)
+  // 涨幅居前板块（只保留A股板块，按涨幅降序）
+  const topGainers = concepts
+    .filter(c => c.sentiment !== '看空' && isAShareSector(c))
     .map((c, i) => ({
       name: c.name,
       change: (1.5 + i * 0.3 + c.score * 0.1).toFixed(2),
       netInflow: (5 + Math.random() * 15).toFixed(2),
       leaders: c.leaders.slice(0, 3),
-    }));
-  
-  // 跌幅居前板块（取热度低或偏空的概念）
-  const topLosers = [...concepts]
-    .filter(c => c.sentiment !== '看多')
-    .sort((a, b) => a.score - b.score)
-    .slice(0, 5)
+    }))
+    .sort((a, b) => parseFloat(b.change) - parseFloat(a.change))
+    .slice(0, 5);
+
+  // 跌幅居前板块（只保留A股板块，按跌幅降序）
+  const topLosers = concepts
+    .filter(c => c.sentiment !== '看多' && isAShareSector(c))
     .map((c, i) => ({
       name: c.name,
       change: (-1.2 - i * 0.25).toFixed(2),
       netOutflow: (3 + Math.random() * 10).toFixed(2),
       leaders: c.leaders.slice(0, 3),
-    }));
-  
-  // 主力净流入板块（热度最高的前5个）
-  const topInflow = [...concepts]
+    }))
+    .sort((a, b) => parseFloat(a.change) - parseFloat(b.change))
+    .slice(0, 5);
+
+  // 主力净流入板块（只保留A股板块，热度最高的前5个）
+  const topInflow = concepts
+    .filter(isAShareSector)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
     .map((c, i) => ({
@@ -487,9 +492,10 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent) {
       netInflow: (20 - i * 3 + Math.random() * 5).toFixed(2),
       change: (0.8 + i * 0.2).toFixed(2),
     }));
-  
-  // 主力净流出板块
-  const topOutflow = [...concepts]
+
+  // 主力净流出板块（只保留A股板块）
+  const topOutflow = concepts
+    .filter(isAShareSector)
     .sort((a, b) => a.score - b.score)
     .slice(0, 5)
     .map((c, i) => ({
