@@ -107,11 +107,27 @@ async function fetchQuotes(codes) {
 }
 
 // 腾讯财经补充数据：纳斯达克指数 + A股成交额（金十MCP不提供）
+// 美股行业ETF代码→中文名映射
+const US_SECTOR_ETFS = [
+  { code: 'usXLK', name: '科技' },
+  { code: 'usXLE', name: '能源' },
+  { code: 'usXLF', name: '金融' },
+  { code: 'usXLV', name: '医疗保健' },
+  { code: 'usXLY', name: '可选消费' },
+  { code: 'usXLP', name: '必需消费' },
+  { code: 'usXLI', name: '工业' },
+  { code: 'usXLB', name: '材料' },
+  { code: 'usXLU', name: '公用事业' },
+  { code: 'usXLRE', name: '房地产' },
+  { code: 'usXLC', name: '通信服务' },
+];
+
 async function fetchTencentIndexes() {
-  const result = { nasdaq: null, aShareTurnover: null };
+  const result = { nasdaq: null, aShareTurnover: null, usSectors: [] };
   try {
+    const allCodes = ['usIXIC', 'sh000001', 'sz399001', 'sz399006', ...US_SECTOR_ETFS.map(e => e.code)];
     const data = await new Promise((resolve, reject) => {
-      const req = https.get('https://qt.gtimg.cn/q=usIXIC,sh000001,sz399001,sz399006', {
+      const req = https.get('https://qt.gtimg.cn/q=' + allCodes.join(','), {
         headers: { 'Referer': 'https://gu.qq.com/' }
       }, (res) => {
         let raw = '';
@@ -144,12 +160,24 @@ async function fetchTencentIndexes() {
       const m = data.match(new RegExp(`v_${code}="([^"]*)"`));
       if (m) {
         const f = m[1].split('~');
-        // 字段[37]为成交额（万元）
         const amt = parseFloat(f[37]);
         if (!isNaN(amt)) turnover += amt;
       }
     }
     if (turnover > 0) result.aShareTurnover = (turnover / 10000).toFixed(0);
+
+    // 解析美股行业ETF涨跌幅
+    for (const etf of US_SECTOR_ETFS) {
+      const m = data.match(new RegExp(`v_${etf.code}="([^"]*)"`));
+      if (m) {
+        const f = m[1].split('~');
+        const chg = parseFloat(f[32]);
+        if (!isNaN(chg)) {
+          result.usSectors.push({ name: etf.name, change: chg.toFixed(2) });
+        }
+      }
+    }
+    console.log(`  ✓ 获取 ${result.usSectors.length} 个美股行业ETF`);
   } catch (e) {
     console.log('  ⚠ 获取腾讯财经补充数据失败:', e.message);
   }
@@ -731,19 +759,25 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent, tdx) {
     { name: '标普500', code: 'SPX', change: quotes['SPX']?.changePercent ?? 0, points: quotes['SPX']?.change ?? 0, level: quotes['SPX']?.price ?? 0 },
   ];
   
-  // 美股热门板块（基于真实指数涨跌推断）
-  const usSectors = [
-    { name: '科技', change: (djiChange * 1.3).toFixed(2) },
-    { name: '能源', change: oil ? oil.changePercent.toFixed(2) : '0.50' },
-    { name: '金融', change: (djiChange * 0.7).toFixed(2) },
-    { name: '医疗', change: (djiChange * 0.5).toFixed(2) },
-    { name: '消费', change: (djiChange * 0.6).toFixed(2) },
-  ];
+  // 美股行业板块（腾讯财经真实ETF涨跌幅，兜底估算）
+  const usSectors = (tencent?.usSectors && tencent.usSectors.length > 0)
+    ? tencent.usSectors
+    : [
+      { name: '科技', change: (djiChange * 1.3).toFixed(2) },
+      { name: '能源', change: oil ? oil.changePercent.toFixed(2) : '0.50' },
+      { name: '金融', change: (djiChange * 0.7).toFixed(2) },
+      { name: '医疗保健', change: (djiChange * 0.5).toFixed(2) },
+      { name: '可选消费', change: (djiChange * 0.6).toFixed(2) },
+    ];
   
-  // 美股AI分析
+  // 美股AI分析（基于真实板块表现生成）
+  const usSorted = [...usSectors].sort((a, b) => parseFloat(b.change) - parseFloat(a.change));
+  const usTopSector = usSorted[0];
+  const usBottomSector = usSorted[usSorted.length - 1];
+  const usUpCount = usSectors.filter(s => parseFloat(s.change) >= 0).length;
   const usSummary = usMarketUp
-    ? '美股市场整体偏强，科技股领涨，能源板块受油价支撑表现稳健。市场情绪乐观，投资者风险偏好回升。'
-    : '美股市场震荡整理，科技股承压，能源板块分化。市场观望情绪浓厚，等待美联储政策信号指引。';
+    ? `美股市场整体偏强，${usTopSector?.name || '科技'}板块领涨${parseFloat(usTopSector?.change || 0) > 1 ? '超1%' : ''}，${usBottomSector?.name || '能源'}相对承压。市场情绪乐观，投资者风险偏好回升。`
+    : `美股市场震荡整理，${usBottomSector?.name || '科技'}板块跌幅居前，${usTopSector?.name || '能源'}表现相对抗跌。${usUpCount}个板块上涨，市场观望情绪浓厚，等待美联储政策信号指引。`;
   
   return {
     aShare: {
