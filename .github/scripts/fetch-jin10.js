@@ -827,7 +827,22 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent, tdx) {
   };
 }
 
-function generateConceptAnalysis(news) {
+function generateConceptAnalysis(news, quotes, tdx) {
+  // 概念名 → 通达信板块名映射（用于关联真实涨跌幅/资金流）
+  const CONCEPT_TO_TDX = {
+    'AI/人工智能': 'AI/人工智能',
+    '新能源': '新能源',
+    '贵金属': '贵金属',
+    '原油/能源': '原油/能源',
+    '有色金属': '有色金属',
+    '金融/券商': '金融/券商',
+    '汽车/整车': '汽车/整车',
+    '医药/创新药': '医药',
+    '数字经济': '数字经济',
+  };
+  const gainMap = tdx?.sectorGains || {};
+  const flowMap = tdx?.sectorFlows || {};
+
   // 从新闻中提取热门概念
   const conceptMap = {};
   
@@ -1105,18 +1120,57 @@ function generateConceptAnalysis(news) {
     let sentiment = '中性';
     if (c.bullScore > c.bearScore + 2) sentiment = '看多';
     else if (c.bearScore > c.bullScore + 2) sentiment = '看空';
-    
+
+    // 关联通达信真实板块涨跌幅/资金流
+    const tdxName = CONCEPT_TO_TDX[c.name];
+    const sectorChange = tdxName && gainMap[tdxName] !== undefined ? gainMap[tdxName] : null;
+    const netFlow = tdxName && flowMap[tdxName] !== undefined ? flowMap[tdxName] : null;
+
+    // 趋势：优先真实涨跌幅，否则按热度排名
+    let trend = 'flat';
+    if (sectorChange !== null) trend = sectorChange > 0.5 ? 'up' : sectorChange < -0.5 ? 'down' : 'flat';
+    else trend = i < 5 ? 'up' : (i > 10 ? 'down' : 'flat');
+
     const analysis = conceptAnalysisMap[c.name] || { bullish: '', bearish: '', neutral: '', logic: '' };
-    const summary = sentiment === '看多' ? analysis.bullish : sentiment === '看空' ? analysis.bearish : analysis.neutral;
-    
+
+    // 动态AI摘要：模板 + 当日新闻催化 + 真实涨跌幅
+    const newsHead = c.news[0] ? `"${c.news[0].slice(0, 22)}"` : '';
+    const changeText = sectorChange !== null
+      ? `板块今日${sectorChange >= 0 ? '上涨' : '下跌'}${Math.abs(sectorChange).toFixed(2)}%`
+      : '板块热度居前';
+    const flowText = netFlow !== null
+      ? `主力资金${netFlow >= 0 ? '净流入' : '净流出'}${Math.abs(netFlow).toFixed(1)}亿`
+      : '';
+    const flowPart = flowText ? `，${flowText}` : '';
+    let summary;
+    if (sentiment === '看多') {
+      summary = `${analysis.bullish}。${newsHead}形成催化，${changeText}${flowPart}，短线情绪偏强。`;
+    } else if (sentiment === '看空') {
+      summary = `${analysis.bearish}。${newsHead}压制情绪，${changeText}${flowPart}，注意控制风险。`;
+    } else {
+      summary = `${analysis.neutral}。${newsHead}提供催化，${changeText}${flowPart}，关注后续量能配合。`;
+    }
+
+    // 催化因素（相关新闻标题）
+    const catalyst = c.news.slice(0, 2);
+
+    // 风险提示
+    const risk = c.bearScore > 0
+      ? `${analysis.bearish}${c.bearScore > 3 ? '，近期利空消息偏多，注意仓位控制' : ''}`
+      : '短期无明显利空，关注板块轮动与获利回吐风险';
+
     return {
       rank: i + 1,
       name: c.name,
       score: c.score,
-      trend: i < 5 ? 'up' : (i > 10 ? 'down' : 'flat'),
+      trend: trend,
       sentiment: sentiment,
       aiSummary: summary,
       coreLogic: analysis.logic,
+      catalyst: catalyst,
+      risk: risk,
+      sectorChange: sectorChange !== null ? sectorChange.toFixed(2) : null,
+      netFlow: netFlow !== null ? netFlow.toFixed(2) : null,
       leaders: aShareLeadersMap[c.name] || [],
       relatedNews: c.news,
       keyEvents: c.keyEvents,
@@ -1688,28 +1742,75 @@ function enrichNewsWithSummaryAndStocks(news) {
   });
 }
 
-function generateOverviewAnalysis(quotes, news, concepts) {
+function generateOverviewAnalysis(quotes, news, concepts, tdx, tencent) {
   const xau = quotes['XAUUSD'];
   const oil = quotes['USOIL'];
-  
+  const sh = quotes['000001'];
+  const sz = quotes['399001'];
+  const cyb = quotes['399006'];
+  const dji = quotes['DJI'];
+  const spx = quotes['SPX'];
+  const nasdaq = tencent?.nasdaq;
+
   // 判断今日热点
   const hotNews = news.slice(0, 5);
-  
-  // 走强板块预测（基于热度前3的概念）
-  const strongSectors = concepts.slice(0, 3).map(c => ({
-    name: c.name,
-    reason: (c.relatedNews && c.relatedNews[0]) || '新闻热度较高',
-  }));
-  
-  // 市场情绪判断
+
+  // 市场情绪判断（综合A股 + 商品 + 美股）
   const commodityUp = (xau?.changePercent || 0) + (oil?.changePercent || 0);
-  const sentiment = commodityUp > 1 ? '偏暖' : commodityUp < -1 ? '偏冷' : '中性';
-  
+  const aShareUp = (sh?.changePercent || 0) + (sz?.changePercent || 0) + (cyb?.changePercent || 0);
+  const usUp = (dji?.changePercent || 0) + (spx?.changePercent || 0) + (nasdaq?.changePercent || 0);
+  let sentiment;
+  if (commodityUp > 1 && aShareUp > 0) sentiment = '偏暖';
+  else if (commodityUp < -1 && aShareUp < 0) sentiment = '偏冷';
+  else sentiment = '中性';
+
+  // 走强板块预测：综合热度 + 真实涨跌幅 + 主力资金流打分
+  const gainMap = tdx?.sectorGains || {};
+  const flowMap = tdx?.sectorFlows || {};
+  const strongSectors = concepts
+    .map(c => {
+      const chg = gainMap[c.name] !== undefined ? gainMap[c.name] : null;
+      const flow = flowMap[c.name] !== undefined ? flowMap[c.name] : null;
+      let score = c.score;
+      if (chg !== null) score += Math.max(0, chg) * 2;
+      if (flow !== null && flow > 0) score += Math.min(3, flow / 10);
+      return { name: c.name, score, change: chg, flow, reason: (c.relatedNews && c.relatedNews[0]) || '新闻热度较高' };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map(c => ({
+      name: c.name,
+      reason: c.change !== null
+        ? `${c.reason}；板块${c.change >= 0 ? '涨' : '跌'}${Math.abs(c.change).toFixed(2)}%${c.flow !== null ? `，主力${c.flow >= 0 ? '净流入' : '净流出'}${Math.abs(c.flow).toFixed(1)}亿` : ''}`
+        : c.reason,
+    }));
+
+  // 今日要点
+  const keyPoints = [];
+  if (sh) keyPoints.push(`上证指数${sh.changePercent >= 0 ? '上涨' : '下跌'}${Math.abs(sh.changePercent).toFixed(2)}%报${sh.price.toFixed(2)}点`);
+  if (xau) keyPoints.push(`黄金${xau.changePercent >= 0 ? '上涨' : '下跌'}${Math.abs(xau.changePercent).toFixed(2)}%报${xau.price.toFixed(2)}美元`);
+  if (oil) keyPoints.push(`原油${oil.changePercent >= 0 ? '上涨' : '下跌'}${Math.abs(oil.changePercent).toFixed(2)}%报${oil.price.toFixed(2)}美元`);
+  if (tdx?.limitUp !== undefined && tdx?.limitUp !== null) keyPoints.push(`两市涨停${tdx.limitUp}家、跌停${tdx.limitDown}家`);
+  if (tencent?.aShareTurnover) keyPoints.push(`两市成交额${tencent.aShareTurnover}亿元`);
+  if (concepts.length > 0) keyPoints.push(`热点集中在${concepts.slice(0, 3).map(c => c.name).join('、')}等领域`);
+
+  // 风险提示
+  const riskWarning = [];
+  if (aShareUp < 0) riskWarning.push('A股主要指数收跌，市场情绪偏谨慎');
+  if (commodityUp < 0) riskWarning.push('大宗商品整体走弱，周期板块承压');
+  if (tdx?.limitDown !== undefined && tdx?.limitDown !== null && tdx.limitDown > 15) riskWarning.push(`跌停家数达${tdx.limitDown}家，注意个股风险`);
+  if (riskWarning.length === 0) riskWarning.push('市场整体风险可控，关注量能变化');
+
+  // 综合研判摘要
+  const summary = `今日A股${sh ? `${sh.changePercent >= 0 ? '震荡上行' : '震荡调整'}，上证指数${sh.changePercent >= 0 ? '涨' : '跌'}${Math.abs(sh.changePercent).toFixed(2)}%` : '震荡'}，${sz ? `深证成指${sz.changePercent >= 0 ? '涨' : '跌'}${Math.abs(sz.changePercent).toFixed(2)}%` : ''}。美股方面，${dji ? `道指${dji.changePercent >= 0 ? '涨' : '跌'}${Math.abs(dji.changePercent).toFixed(2)}%` : ''}${nasdaq ? `、纳指${nasdaq.changePercent >= 0 ? '涨' : '跌'}${Math.abs(nasdaq.changePercent).toFixed(2)}%` : ''}。大宗商品${xau ? `黄金${xau.changePercent >= 0 ? '涨' : '跌'}${Math.abs(xau.changePercent).toFixed(2)}%` : ''}${oil ? `、原油${oil.changePercent >= 0 ? '涨' : '跌'}${Math.abs(oil.changePercent).toFixed(2)}%` : ''}。市场情绪${sentiment}，热点集中在${concepts.slice(0, 3).map(c => c.name).join('、')}等领域${tdx?.limitUp !== undefined && tdx?.limitUp !== null ? `，涨停${tdx.limitUp}家` : ''}${tencent?.aShareTurnover ? `、成交额${tencent.aShareTurnover}亿` : ''}。`;
+
   return {
     sentiment,
     hotNews,
     strongSectors,
-    summary: `今日全球市场情绪${sentiment}。大宗商品方面，${xau ? `黄金${xau.changePercent >= 0 ? '上涨' : '下跌'}${Math.abs(xau.changePercent).toFixed(2)}%` : ''}${oil ? `，原油${oil.changePercent >= 0 ? '上涨' : '下跌'}${Math.abs(oil.changePercent).toFixed(2)}%` : ''}。热点集中在${concepts.slice(0, 3).map(c => c.name).join('、')}等领域。`,
+    keyPoints: keyPoints.slice(0, 5),
+    riskWarning: riskWarning.slice(0, 3),
+    summary,
   };
 }
 
@@ -1773,9 +1874,9 @@ async function main() {
     
     // 8. 生成概念板块分析
     console.log('\n--- 生成概念板块分析 ---');
-    const concepts = generateConceptAnalysis(news);
+    const concepts = generateConceptAnalysis(news, quotes, tdx);
     console.log(`✓ ${concepts.length} 个热门概念`);
-    concepts.slice(0, 5).forEach(c => console.log(`  ${c.rank}. ${c.name} (热度${c.score})`));
+    concepts.slice(0, 5).forEach(c => console.log(`  ${c.rank}. ${c.name} (热度${c.score}) 涨跌${c.sectorChange ?? '--'}%`));
     
     // 8.5 新闻增强：添加一句话摘要和关联A股
     console.log('\n--- 新闻增强处理 ---');
@@ -1785,7 +1886,7 @@ async function main() {
     
     // 9. 生成概览分析
     console.log('\n--- 生成概览分析 ---');
-    const overview = generateOverviewAnalysis(quotes, news, concepts);
+    const overview = generateOverviewAnalysis(quotes, news, concepts, tdx, tencent);
     console.log(`✓ 市场情绪: ${overview.sentiment}`);
     
     // 9.5 生成收盘总结

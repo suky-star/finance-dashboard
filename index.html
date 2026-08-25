@@ -362,7 +362,18 @@
                   </div>
                   <span class="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full font-medium">${overview.sentiment || '综合研判'}</span>
                 </div>
-                <p class="text-xs text-foreground leading-relaxed mb-4">${overview.summary}</p>
+                <p class="text-xs text-foreground leading-relaxed mb-3">${overview.summary}</p>
+                
+                ${overview.keyPoints && overview.keyPoints.length > 0 ? `
+                <div class="mb-4 p-2.5 bg-accent/40 rounded-lg space-y-1">
+                  ${overview.keyPoints.map(k => `
+                    <div class="flex items-start gap-1.5">
+                      <span class="text-primary text-xs mt-0.5">•</span>
+                      <span class="text-[11px] text-foreground leading-relaxed">${esc(k)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+                ` : ''}
                 
                 <div class="flex bg-accent rounded-lg p-0.5 mb-4">
                   <button onclick="setHotTab('hot')" class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${hotTabActive ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground'}">热门概念</button>
@@ -371,7 +382,13 @@
                 
                 ${hotTabActive ? `
                   <div class="space-y-3">
-                    ${concepts.slice(0, 6).map((s, i) => `
+                    ${concepts.slice(0, 6).map((s, i) => {
+                      const chg = s.sectorChange !== null && s.sectorChange !== undefined ? parseFloat(s.sectorChange) : null;
+                      const chgColor = chg !== null ? (chg >= 0 ? 'text-rise' : 'text-fall') : 'text-muted-foreground';
+                      const chgText = chg !== null ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : '';
+                      const flow = s.netFlow !== null && s.netFlow !== undefined ? parseFloat(s.netFlow) : null;
+                      const flowText = flow !== null ? `主力${flow >= 0 ? '流入' : '流出'}${Math.abs(flow).toFixed(1)}亿` : '';
+                      return `
                       <div class="space-y-1.5">
                         <div class="flex items-center justify-between">
                           <div class="flex items-center gap-2">
@@ -379,14 +396,16 @@
                             <span class="text-sm font-semibold text-foreground">${esc(s.name)}</span>
                             ${s.trend === 'up' ? '<span class="text-rise text-xs font-bold">↑</span>' : s.trend === 'down' ? '<span class="text-fall text-xs font-bold">↓</span>' : ''}
                           </div>
-                          <div class="flex items-center gap-1.5">
+                          <div class="flex items-center gap-2">
+                            ${chgText ? `<span class="text-xs font-bold font-din ${chgColor}">${chgText}</span>` : ''}
                             <div class="w-16 h-1.5 bg-accent rounded-full overflow-hidden"><div class="h-full bg-gradient-to-r from-hot to-rise rounded-full" style="width:${Math.min(100, s.score * 8)}%"></div></div>
                             <span class="text-xs font-bold text-hot w-7 text-right">${s.score}</span>
                           </div>
                         </div>
+                        ${flowText ? `<div class="pl-7 text-[10px] ${flow >= 0 ? 'text-rise' : 'text-fall'} font-medium">${flowText}</div>` : ''}
                         ${s.relatedNews && s.relatedNews[0] ? `<p class="text-[11px] text-muted-foreground pl-7 leading-relaxed">${esc(s.relatedNews[0])}</p>` : ''}
                       </div>
-                    `).join('')}
+                    `}).join('')}
                   </div>
                 ` : `
                   <div class="space-y-3">
@@ -406,6 +425,20 @@
                     `).join('')}
                   </div>
                 `}
+                
+                ${overview.riskWarning && overview.riskWarning.length > 0 ? `
+                <div class="mt-4 pt-3 border-t border-border/60">
+                  <div class="flex items-center gap-1.5 mb-1.5">
+                    <span class="text-[10px] font-bold text-fall">风险提示</span>
+                  </div>
+                  ${overview.riskWarning.map(r => `
+                    <div class="flex items-start gap-1.5">
+                      <span class="text-fall text-xs mt-0.5 font-bold">!</span>
+                      <span class="text-[11px] text-muted-foreground leading-relaxed">${esc(r)}</span>
+                    </div>
+                  `).join('')}
+                </div>
+                ` : ''}
               </div>
               ` : ''}
 
@@ -965,6 +998,11 @@
                   const isUp = c.trend === 'up';
                   const cnLeaders = (c.leaders || []).filter(l => l.region === 'cn');
                   const sentColor = c.sentiment === '看多' ? 'bg-rise/10 text-rise' : c.sentiment === '看空' ? 'bg-fall/10 text-fall' : 'bg-muted-foreground/10 text-muted-foreground';
+                  const chg = c.sectorChange !== null && c.sectorChange !== undefined ? parseFloat(c.sectorChange) : null;
+                  const chgColor = chg !== null ? (chg >= 0 ? 'text-rise' : 'text-fall') : 'text-muted-foreground';
+                  const chgText = chg !== null ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : '';
+                  const flow = c.netFlow !== null && c.netFlow !== undefined ? parseFloat(c.netFlow) : null;
+                  const flowText = flow !== null ? `主力${flow >= 0 ? '净流入' : '净流出'}${Math.abs(flow).toFixed(1)}亿` : '';
                   return `
                     <div class="bg-card rounded-xl p-4 shadow-soft">
                       <div class="flex items-center justify-between mb-3">
@@ -976,18 +1014,41 @@
                               ${c.rank <= 3 ? '<span class="text-[9px] px-1.5 py-0.5 bg-hot/15 text-hot rounded font-bold">HOT</span>' : ''}
                               ${c.sentiment ? `<span class="text-[9px] px-1.5 py-0.5 ${sentColor} rounded font-bold">${esc(c.sentiment)}</span>` : ''}
                             </div>
-                            <div class="text-[10px] text-muted-foreground mt-0.5">热度指数 ${c.score}</div>
+                            <div class="text-[10px] text-muted-foreground mt-0.5">热度指数 ${c.score}${chgText ? ` · <span class="font-din ${chgColor}">${chgText}</span>` : ''}</div>
                           </div>
                         </div>
-                        <span class="text-xs font-medium ${isUp ? 'text-rise' : c.trend === 'down' ? 'text-fall' : 'text-muted-foreground'}">
-                          ${isUp ? '↑ 升温' : c.trend === 'down' ? '↓ 降温' : '→ 持平'}
-                        </span>
+                        <div class="text-right">
+                          <div class="text-xs font-medium ${isUp ? 'text-rise' : c.trend === 'down' ? 'text-fall' : 'text-muted-foreground'}">
+                            ${isUp ? '↑ 升温' : c.trend === 'down' ? '↓ 降温' : '→ 持平'}
+                          </div>
+                          ${flowText ? `<div class="text-[10px] ${flow >= 0 ? 'text-rise' : 'text-fall'} font-medium mt-0.5">${flowText}</div>` : ''}
+                        </div>
                       </div>
                       ${c.aiSummary ? `
                       <div class="mb-3 p-2.5 bg-accent/40 rounded-lg">
                         <div class="flex items-start gap-1.5">
                           <span class="text-[10px] text-primary font-bold shrink-0 mt-0.5">AI分析</span>
                           <p class="text-[11px] text-foreground leading-relaxed">${esc(c.aiSummary)}</p>
+                        </div>
+                      </div>
+                      ` : ''}
+                      ${c.catalyst && c.catalyst.length > 0 ? `
+                      <div class="mb-2">
+                        <div class="text-[10px] text-hot font-bold mb-1">催化因素</div>
+                        ${c.catalyst.map(n => `
+                          <div class="flex items-start gap-1.5 mb-1">
+                            <span class="text-hot text-xs mt-0.5">•</span>
+                            <span class="text-[11px] text-muted-foreground leading-relaxed">${esc(n)}</span>
+                          </div>
+                        `).join('')}
+                      </div>
+                      ` : ''}
+                      ${c.risk ? `
+                      <div class="mb-3">
+                        <div class="text-[10px] text-fall font-bold mb-1">风险提示</div>
+                        <div class="flex items-start gap-1.5">
+                          <span class="text-fall text-xs mt-0.5 font-bold">!</span>
+                          <span class="text-[11px] text-muted-foreground leading-relaxed">${esc(c.risk)}</span>
                         </div>
                       </div>
                       ` : ''}
