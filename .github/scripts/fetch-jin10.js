@@ -206,8 +206,9 @@ const TDX_SECTOR_CODES = [
   { code: '880534', name: '锂电池', setcode: '1' },
 ];
 
-// 通达信只在计划时间（北京时间 7/12/16/20 点）调用，其余时间跳过
+// 通达信只在计划时间（北京时间 7/12/16/20 点）调用，其余时间跳过；FORCE_TDX=1 可手动强制（本地生成用）
 function isScheduledTime() {
+  if (process.env.FORCE_TDX === '1') return true;
   const beijingHour = (new Date().getUTCHours() + 8) % 24;
   return [7, 12, 16, 20].includes(beijingHour);
 }
@@ -643,6 +644,24 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent, tdx) {
   const gainMap = tdx?.sectorGains || {};
   const realGain = c => gainMap[c.name] !== undefined ? gainMap[c.name] : null;
 
+  // 通达信不可用时的兜底板块涨跌幅（正负各7个，保证榜单完整）
+  const FALLBACK_SECTOR_CHANGES = [
+    { name: 'AI/人工智能', change: 2.85 },
+    { name: '贵金属', change: 2.15 },
+    { name: '数字经济', change: 1.85 },
+    { name: '有色金属', change: 1.45 },
+    { name: '金融/券商', change: 1.10 },
+    { name: '电力', change: 0.75 },
+    { name: '银行', change: 0.40 },
+    { name: '新能源', change: -0.45 },
+    { name: '汽车/整车', change: -0.85 },
+    { name: '医药', change: -1.25 },
+    { name: '原油/能源', change: -1.55 },
+    { name: '锂电池', change: -1.85 },
+    { name: '多元金融', change: -2.10 },
+    { name: '建筑工程', change: -2.45 },
+  ];
+
   // 每个板块统一涨跌幅（真实优先，模拟兜底），保证涨幅/跌幅榜数值一致
   const sectorChange = (c, i) => {
     const g = realGain(c);
@@ -682,7 +701,8 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent, tdx) {
         leaders: [],
       }));
   } else {
-    topGainers = allSectorChanges
+    // 兜底：固定板块池，确保涨幅/跌幅各至少5个
+    topGainers = FALLBACK_SECTOR_CHANGES
       .filter(s => s.change > 0)
       .sort((a, b) => b.change - a.change)
       .slice(0, 5)
@@ -690,9 +710,9 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent, tdx) {
         name: s.name,
         change: s.change.toFixed(2),
         netInflow: (5 + Math.random() * 15).toFixed(2),
-        leaders: s.leaders,
+        leaders: [],
       }));
-    topLosers = allSectorChanges
+    topLosers = FALLBACK_SECTOR_CHANGES
       .filter(s => s.change < 0)
       .sort((a, b) => a.change - b.change)
       .slice(0, 5)
@@ -700,7 +720,7 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent, tdx) {
         name: s.name,
         change: s.change.toFixed(2),
         netOutflow: (3 + Math.random() * 10).toFixed(2),
-        leaders: s.leaders,
+        leaders: [],
       }));
   }
 
@@ -721,14 +741,16 @@ function generateMarketCloseSummary(concepts, news, quotes, tencent, tdx) {
         change: (0.8 + i * 0.2).toFixed(2),
       }));
 
-  // 主力净流出板块（仅负涨幅板块，按跌幅降序）
-  const topOutflow = allSectorChanges
-    .filter(s => s.change < 0)
+  // 主力净流出板块（优先真实数据，兜底固定板块池，保证至少5个）
+  const outflowSource = tdxSectorNames.length >= 10
+    ? tdxSectorNames.map(name => ({ name, change: gainMap[name], flow: tdx?.sectorFlows?.[name] ?? 0 })).filter(s => s.change < 0)
+    : FALLBACK_SECTOR_CHANGES.filter(s => s.change < 0).map(s => ({ name: s.name, change: s.change, flow: s.change * 3 }));
+  const topOutflow = outflowSource
     .sort((a, b) => a.change - b.change)
     .slice(0, 5)
     .map(s => ({
       name: s.name,
-      netOutflow: Math.abs(s.change * 3).toFixed(2),
+      netOutflow: Math.abs(s.flow).toFixed(2),
       change: s.change.toFixed(2),
     }));
   
